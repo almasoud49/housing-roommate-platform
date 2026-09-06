@@ -1,0 +1,38 @@
+enum NotificationType {
+  APPLICATION_SUBMITTED
+  APPLICATION_ACCEPTED
+  APPLICATION_REJECTED
+  VIEWING_REQUESTED
+  VIEWING_CONFIRMED
+  VIEWING_CANCELLED
+  RENT_DUE
+  RENT_OVERDUE
+  RENT_PAID
+  MAINTENANCE_CREATED
+  MAINTENANCE_UPDATED
+  MAINTENANCE_RESOLVED
+  UTILITY_BILL_CREATED
+  UTILITY_BILL_DUE
+  DOCUMENT_SIGNED
+  DOCUMENT_EXPIRING
+  ROOMMATE_MATCH
+  SYSTEM_ANNOUNCEMENT
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?            // additional data like entity IDs, URLs
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([userId, isRead])
+}

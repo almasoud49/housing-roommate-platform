@@ -1,0 +1,39 @@
+model Profile {
+  id              String            @id @default(uuid())
+  userId          String            @unique
+  user            User              @relation(fields: [userId], references: [id])
+  bio             String?
+  avatarUrl       String?
+  phoneNumber     String?
+  preferences     String?
+  roommatePrefs   RoommatePreference?
+
+  
+}
+
+model RoommatePreference {
+  id                String   @id @default(uuid())
+  profileId         String   @unique
+  profile           Profile  @relation(fields: [profileId], references: [id])
+  budgetMin         Float?
+  budgetMax         Float?
+  preferredCities   String[]
+  preferredAreas    String[]
+  lifestyle         String?      // e.g., "quiet", "social", "student", "professional"
+  cleanlinessLevel  Int?         // 1-5 scale
+  noiseTolerance    Int?         // 1-5 scale
+  smokingAllowed    Boolean      @default(false)
+  petsAllowed       Boolean      @default(false)
+  guestsFrequency   String?      // "rare", "occasional", "frequent"
+  workSchedule      String?      // "day", "night", "shift", "remote"
+  moveInDate        DateTime?
+  leaseDuration     Int?         // in months
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([budgetMin, budgetMax])
+  @@index([lifestyle])
+  @@index([smokingAllowed])
+  @@index([petsAllowed])
+  @@index([moveInDate])
+}

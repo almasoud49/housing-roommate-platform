@@ -1,0 +1,29 @@
+enum ViewingRequestStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model PropertyViewingRequest {
+  id          String              @id @default(uuid())
+  tenantId    String
+  tenant      User                @relation(fields: [tenantId], references: [id])
+  roomId      String
+  room        Room                @relation(fields: [roomId], references: [id])
+  preferredDate DateTime
+  preferredTime String
+  status      ViewingRequestStatus @default(PENDING)
+  notes       String?
+  confirmedAt DateTime?
+  completedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([tenantId])
+  @@index([roomId])
+  @@index([status])
+  @@index([preferredDate])
+  @@index([createdAt])
+}

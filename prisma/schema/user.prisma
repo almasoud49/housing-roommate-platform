@@ -1,0 +1,37 @@
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String?
+  name              String
+  role              Role      @default(TENANT)
+  status            UserStatus @default(ACTIVE)
+  authProvider      AuthProvider @default(CREDENTIAL)
+  googleId          String?   @unique
+  emailVerified     Boolean   @default(false)
+  refreshToken      String?
+  isVerified        Boolean   @default(false) // tenant verification
+  verificationDocs  String[]  // document URLs
+  profile           Profile?
+  properties        Property[]
+  applications      Application[]
+  reviewsGiven      Review[]  @relation("Reviewer")
+  reviewsReceived   Review[]  @relation("Reviewee")
+  payments          Payment[]
+  auditLogs         AuditLog[]
+  viewingRequests   PropertyViewingRequest[]
+  maintenanceRequests MaintenanceRequest[]
+  rents             Rent[]
+  utilityBillSplits UtilityBillSplit[]
+  notifications     Notification[]
+  roommateMatchesAsSeeker RoommateMatch[] @relation("SeekingRoommate")
+  roommateMatchesAsPotential RoommateMatch[] @relation("PotentialRoommate")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  @@index([role])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([isVerified])
+  @@index([createdAt])
+}

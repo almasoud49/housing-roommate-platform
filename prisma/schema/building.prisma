@@ -1,0 +1,17 @@
+model Building {
+  id          String   @id @default(uuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id])
+  name        String
+  address     String
+  city        String
+  floors      Int      @default(1)
+  flats       Flat[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([propertyId])
+  @@index([city])
+  @@index([deletedAt])
+}

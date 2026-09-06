@@ -1,0 +1,57 @@
+enum UtilityType {
+  ELECTRICITY
+  WATER
+  GAS
+  INTERNET
+  TRASH
+  OTHER
+}
+
+enum UtilityBillStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+}
+
+model UtilityBill {
+  id            String            @id @default(uuid())
+  roomId        String
+  room          Room              @relation(fields: [roomId], references: [id])
+  type          UtilityType
+  amount        Float
+  currency      String            @default("BDT")
+  billingPeriod DateTime          // start of billing period
+  dueDate       DateTime
+  status        UtilityBillStatus @default(PENDING)
+  billUrl       String?           // Cloudinary URL for bill document
+  notes         String?
+  splits        UtilityBillSplit[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([roomId])
+  @@index([type])
+  @@index([status])
+  @@index([billingPeriod])
+  @@index([dueDate])
+  @@index([createdAt])
+}
+
+model UtilityBillSplit {
+  id              String   @id @default(uuid())
+  utilityBillId   String
+  utilityBill     UtilityBill @relation(fields: [utilityBillId], references: [id])
+  tenantId        String
+  tenant          User     @relation(fields: [tenantId], references: [id])
+  amount          Float
+  status          UtilityBillStatus @default(PENDING)
+  paidDate        DateTime?
+  paymentId       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([utilityBillId, tenantId])
+  @@index([tenantId])
+  @@index([status])
+}

@@ -1,0 +1,21 @@
+model Payment {
+  id                      String   @id @default(uuid())
+  applicationId           String   @unique
+  application             Application @relation(fields: [applicationId], references: [id])
+  tenantId                String
+  tenant                  User     @relation(fields: [tenantId], references: [id])
+  amount                  Float
+  currency                String   @default("BDT")
+  status                  PaymentStatus @default(PENDING)
+  bkashPaymentId          String?  @unique
+  bkashCreateResponse     Json?
+  bkashExecuteResponse    Json?
+  rents                   Rent[]
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([bkashPaymentId])
+  @@index([createdAt])
+}

@@ -1,0 +1,39 @@
+enum DocumentType {
+  LEASE_AGREEMENT
+  MOVE_IN_CHECKLIST
+  MOVE_OUT_CHECKLIST
+  ID_DOCUMENT
+  INCOME_PROOF
+  REFERENCE_LETTER
+  INSURANCE
+  OTHER
+}
+
+enum DocumentStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  SIGNED
+  EXPIRED
+  REVOKED
+}
+
+model RentalDocument {
+  id            String         @id @default(uuid())
+  applicationId String
+  application   Application    @relation(fields: [applicationId], references: [id])
+  type          DocumentType
+  title         String
+  fileUrl       String         // Cloudinary URL
+  status        DocumentStatus @default(DRAFT)
+  signedAt      DateTime?
+  expiresAt     DateTime?
+  metadata      Json?          // additional data like signers, etc.
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([applicationId])
+  @@index([type])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+}

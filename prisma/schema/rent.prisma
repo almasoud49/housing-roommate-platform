@@ -1,0 +1,37 @@
+enum RentStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+  WAIVED
+  REFUNDED
+}
+
+model Rent {
+  id              String     @id @default(uuid())
+  tenantId        String
+  tenant          User       @relation(fields: [tenantId], references: [id])
+  roomId          String
+  room            Room       @relation(fields: [roomId], references: [id])
+  applicationId   String     @unique
+  application     Application @relation(fields: [applicationId], references: [id])
+  amount          Float
+  currency        String     @default("BDT")
+  dueDate         DateTime
+  paidDate        DateTime?
+  status          RentStatus @default(PENDING)
+  paymentId       String?    // links to Payment model
+  payment         Payment?   @relation(fields: [paymentId], references: [id])
+  lateFee         Float      @default(0)
+  notes           String?
+  periodStart     DateTime
+  periodEnd       DateTime
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([tenantId])
+  @@index([roomId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([periodStart, periodEnd])
+}

@@ -1,0 +1,20 @@
+model Application {
+  id              String       @id @default(uuid())
+  tenantId        String
+  tenant          User         @relation(fields: [tenantId], references: [id])
+  roomId          String
+  room            Room         @relation(fields: [roomId], references: [id])
+  status          ApplicationStatus @default(PENDING) 
+  message         String?
+  payment         Payment?
+  rent            Rent?
+  rentalDocuments RentalDocument[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([tenantId, roomId])
+  @@index([tenantId])
+  @@index([roomId])
+  @@index([status])
+  @@index([createdAt])
+}

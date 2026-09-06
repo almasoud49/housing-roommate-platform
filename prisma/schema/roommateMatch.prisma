@@ -1,0 +1,30 @@
+enum MatchStatus {
+  PENDING
+  INTERESTED
+  CONNECTED
+  REJECTED
+  EXPIRED
+}
+
+model RoommateMatch {
+  id           String      @id @default(uuid())
+  tenantId     String      // the tenant seeking a roommate
+  tenant       User        @relation("SeekingRoommate", fields: [tenantId], references: [id])
+  matchedWithId String     // the potential roommate
+  matchedWith   User       @relation("PotentialRoommate", fields: [matchedWithId], references: [id])
+  roomId       String?
+  room         Room?       @relation(fields: [roomId], references: [id])
+  score        Float       // matching score 0-100
+  status       MatchStatus @default(PENDING)
+  matchedAt    DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([tenantId, matchedWithId])
+  @@index([tenantId])
+  @@index([matchedWithId])
+  @@index([roomId])
+  @@index([status])
+  @@index([score])
+  @@index([createdAt])
+}

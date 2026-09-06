@@ -1,0 +1,25 @@
+model Room {
+  id                    String   @id @default(uuid())
+  flatId                String
+  flat                  Flat     @relation(fields: [flatId], references: [id])
+  name                  String   
+  price                 Float
+  availableFrom         DateTime?
+  availableTo           DateTime?
+  isActive              Boolean  @default(true)
+  applications          Application[]
+  viewingRequests       PropertyViewingRequest[]
+  maintenanceRequests   MaintenanceRequest[]
+  rents                 Rent[]
+  utilityBills          UtilityBill[]
+  roommateMatches       RoommateMatch[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([flatId])
+  @@index([isActive])
+  @@index([price])
+  @@index([availableFrom])
+  @@index([availableTo])
+  @@index([createdAt])
+}
