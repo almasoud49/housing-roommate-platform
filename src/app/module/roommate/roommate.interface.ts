@@ -1,5 +1,3 @@
-import type { Role } from "../../../generated/prisma/client";
-
 export interface IRoommatePreferencePayload {
 	budgetMin?: number;
 	budgetMax?: number;

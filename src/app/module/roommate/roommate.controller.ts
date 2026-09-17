@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
-import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { requireUserId } from "../../utils/request";
+import { sendBadRequest, sendCreated, sendOk } from "../../utils/sendResponse";
 import { RoommateService } from "./roommate.service";
 import type {
 	IRoommatePreferencePayload,
@@ -9,7 +9,7 @@ import type {
 } from "./roommate.interface";
 
 const createOrUpdatePrefs = catchAsync(async (req: Request, res: Response) => {
-	const userId = req.user!.userId;
+	const userId = requireUserId(req);
 	const payload = req.body as IRoommatePreferencePayload;
 
 	const result = await RoommateService.createOrUpdateRoommatePrefs(
@@ -17,39 +17,25 @@ const createOrUpdatePrefs = catchAsync(async (req: Request, res: Response) => {
 		payload,
 	);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Roommate preferences saved",
-		data: result,
-	});
+	sendOk(res, "Roommate preferences saved", result);
 });
 
 const findMatches = catchAsync(async (req: Request, res: Response) => {
-	const userId = req.user!.userId;
+	const userId = requireUserId(req);
 	const payload = req.body as IMatchRequestPayload;
 
 	const matches = await RoommateService.findMatches(userId, payload);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Roommate matches found",
-		data: matches,
-	});
+	sendOk(res, "Roommate matches found", matches);
 });
 
 const createMatch = catchAsync(async (req: Request, res: Response) => {
-	const userId = req.user!.userId;
-	const { matchedWithId, roomId } = req.body;
+	const userId = requireUserId(req);
+	const matchedWithId = req.params.matchedWithId;
+	const { roomId } = req.body;
 
 	if (!matchedWithId) {
-		return sendResponse(res, {
-			success: false,
-			statusCode: httpStatus.BAD_REQUEST,
-			message: "matchedWithId is required",
-			data: null,
-		});
+		return sendBadRequest(res, "matchedWithId is required");
 	}
 
 	const match = await RoommateService.createMatch(
@@ -58,28 +44,18 @@ const createMatch = catchAsync(async (req: Request, res: Response) => {
 		roomId,
 	);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.CREATED,
-		message: "Match request sent",
-		data: match,
-	});
+	sendCreated(res, "Match request sent", match);
 });
 
 const updateMatchStatus = catchAsync(async (req: Request, res: Response) => {
-	const userId = req.user!.userId;
+	const userId = requireUserId(req);
 	const matchId = Array.isArray(req.params.matchId)
 		? req.params.matchId[0]
 		: req.params.matchId;
 	const { status } = req.body;
 
 	if (!["INTERESTED", "CONNECTED", "REJECTED"].includes(status)) {
-		return sendResponse(res, {
-			success: false,
-			statusCode: httpStatus.BAD_REQUEST,
-			message: "Invalid status",
-			data: null,
-		});
+		return sendBadRequest(res, "Invalid status");
 	}
 
 	const match = await RoommateService.updateMatchStatus(
@@ -88,29 +64,19 @@ const updateMatchStatus = catchAsync(async (req: Request, res: Response) => {
 		status,
 	);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: `Match ${status.toLowerCase()}`,
-		data: match,
-	});
+	sendOk(res, `Match ${status.toLowerCase()}`, match);
 });
 
 const getMyMatches = catchAsync(async (req: Request, res: Response) => {
-	const userId = req.user!.userId;
+	const userId = requireUserId(req);
 
 	const matches = await RoommateService.getMyMatches(userId);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Matches retrieved",
-		data: matches,
-	});
+	sendOk(res, "Matches retrieved", matches);
 });
 
 const getMyPreferences = catchAsync(async (req: Request, res: Response) => {
-	const userId = req.user!.userId;
+	const userId = requireUserId(req);
 
 	const profile = await (
 		await import("../../lib/prisma")
@@ -119,12 +85,7 @@ const getMyPreferences = catchAsync(async (req: Request, res: Response) => {
 		include: { roommatePrefs: true },
 	});
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Preferences retrieved",
-		data: profile?.roommatePrefs || null,
-	});
+	sendOk(res, "Preferences retrieved", profile?.roommatePrefs || null);
 });
 
 export const RoommateController = {
