@@ -1,12 +1,3 @@
-enum RentStatus {
-  PENDING
-  PAID
-  PARTIAL
-  OVERDUE
-  WAIVED
-  REFUNDED
-}
-
 model Rent {
   id              String     @id @default(uuid())
   tenantId        String
@@ -20,7 +11,7 @@ model Rent {
   dueDate         DateTime
   paidDate        DateTime?
   status          RentStatus @default(PENDING)
-  paymentId       String?    // links to Payment model
+  paymentId       String?    
   payment         Payment?   @relation(fields: [paymentId], references: [id])
   lateFee         Float      @default(0)
   notes           String?

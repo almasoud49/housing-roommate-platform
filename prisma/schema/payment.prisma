@@ -13,9 +13,11 @@ model Payment {
   rents                   Rent[]
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+  deletedAt               DateTime?
 
   @@index([tenantId])
   @@index([status])
   @@index([bkashPaymentId])
   @@index([createdAt])
+  @@index([deletedAt])
 }

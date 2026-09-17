@@ -1,11 +1,3 @@
-enum ViewingRequestStatus {
-  PENDING
-  CONFIRMED
-  COMPLETED
-  CANCELLED
-  NO_SHOW
-}
-
 model PropertyViewingRequest {
   id          String              @id @default(uuid())
   tenantId    String

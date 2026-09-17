@@ -9,8 +9,8 @@ model User {
   googleId          String?   @unique
   emailVerified     Boolean   @default(false)
   refreshToken      String?
-  isVerified        Boolean   @default(false) // tenant verification
-  verificationDocs  String[]  // document URLs
+  isVerified        Boolean   @default(false) 
+  verificationDocs  String[]  
   profile           Profile?
   properties        Property[]
   applications      Application[]

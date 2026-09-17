@@ -1,20 +1,3 @@
-enum MaintenanceStatus {
-  OPEN
-  IN_PROGRESS
-  WAITING_PARTS
-  WAITING_VENDOR
-  RESOLVED
-  CLOSED
-  REJECTED
-}
-
-enum MaintenancePriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-}
-
 model MaintenanceRequest {
   id          String             @id @default(uuid())
   tenantId    String
@@ -25,13 +8,13 @@ model MaintenanceRequest {
   description String
   status      MaintenanceStatus  @default(OPEN)
   priority    MaintenancePriority @default(MEDIUM)
-  category    String             // e.g., "plumbing", "electrical", "appliance", "hvac"
-  assignedTo  String?            // vendor or staff userId
+  category    String             
+  assignedTo  String?           
   estimatedCost Float?
   actualCost   Float?
   scheduledAt DateTime?
   completedAt DateTime?
-  images      String[]           // Cloudinary URLs
+  images      String[]           
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 

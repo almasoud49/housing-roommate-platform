@@ -11,10 +11,12 @@ model Application {
   rentalDocuments RentalDocument[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime?
 
   @@unique([tenantId, roomId])
   @@index([tenantId])
   @@index([roomId])
   @@index([status])
   @@index([createdAt])
+  @@index([deletedAt])
 }

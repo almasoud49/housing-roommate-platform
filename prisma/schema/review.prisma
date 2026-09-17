@@ -7,4 +7,12 @@ model Review {
   rating      Int      
   comment     String?
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([reviewerId])
+  @@index([revieweeId])
+  @@index([rating])
+  @@index([createdAt])
+  @@index([deletedAt])
 }

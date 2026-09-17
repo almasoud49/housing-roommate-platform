@@ -15,6 +15,7 @@ model Room {
   roommateMatches       RoommateMatch[]
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
 
   @@index([flatId])
   @@index([isActive])
@@ -22,4 +23,5 @@ model Room {
   @@index([availableFrom])
   @@index([availableTo])
   @@index([createdAt])
+  @@index([deletedAt])
 }
