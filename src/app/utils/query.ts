@@ -17,6 +17,21 @@ export const buildMeta = (page: number, limit: number, total: number) => ({
 	totalPages: Math.ceil(total / limit),
 });
 
+// Single place that parses raw `req.query` for list endpoints.
+// Keeps defaults in sync with the Zod `*FiltersSchema` (which validate
+// but don't write back coerced values for the `query` target).
+export const parseListParams = (query: {
+	page?: unknown;
+	limit?: unknown;
+	sortBy?: unknown;
+	sortOrder?: unknown;
+}) => ({
+	page: query.page ? parseInt(query.page as string) : 1,
+	limit: query.limit ? parseInt(query.limit as string) : 10,
+	sortBy: (query.sortBy as string) || "createdAt",
+	sortOrder: (query.sortOrder as "asc" | "desc") || "desc",
+});
+
 export const buildSearchConditions = <T extends string>(
 	search: string | undefined,
 	fields: T[],

@@ -405,6 +405,35 @@ const permissionRules: PermissionRule[] = [
 	},
 ];
 
+const roomLandlordInclude = {
+	flat: {
+		include: {
+			building: { include: { property: { select: { landlordId: true } } } },
+		},
+	},
+};
+
+const landlordIdOfRoom = async (
+	roomId: string,
+): Promise<string | undefined> => {
+	const room = await prisma.room.findUnique({
+		where: { id: roomId },
+		include: roomLandlordInclude,
+	});
+	return room?.flat.building.property.landlordId;
+};
+
+// Records that carry { tenantId, roomId }: owned when the record belongs
+// to the tenant, otherwise when the record's room belongs to the landlord.
+const ownsViaTenantOrRoom = async (
+	record: { tenantId: string; roomId: string } | null,
+	userId: string,
+): Promise<boolean> => {
+	if (!record) return false;
+	if (record.tenantId === userId) return true;
+	return (await landlordIdOfRoom(record.roomId)) === userId;
+};
+
 async function checkResourceOwnership(
 	userId: string,
 	resourceType: ResourceType,
@@ -436,155 +465,51 @@ async function checkResourceOwnership(
 			return flat?.building.property.landlordId === userId;
 		}
 		case "room": {
-			const room = await prisma.room.findUnique({
-				where: { id: resourceId },
-				include: {
-					flat: {
-						include: {
-							building: {
-								include: { property: { select: { landlordId: true } } },
-							},
-						},
-					},
-				},
-			});
-			return room?.flat.building.property.landlordId === userId;
+			return (await landlordIdOfRoom(resourceId)) === userId;
 		}
 		case "application": {
 			const application = await prisma.application.findUnique({
 				where: { id: resourceId },
 				select: { tenantId: true, roomId: true },
 			});
-			if (!application) return false;
-
-			// Tenant owns their own applications
-			if (application.tenantId === userId) return true;
-
-			// Landlord/Property Manager owns applications for their rooms
-			const room = await prisma.room.findUnique({
-				where: { id: application.roomId },
-				include: {
-					flat: {
-						include: {
-							building: {
-								include: { property: { select: { landlordId: true } } },
-							},
-						},
-					},
-				},
-			});
-			return room?.flat.building.property.landlordId === userId;
+			return ownsViaTenantOrRoom(application, userId);
 		}
 		case "maintenanceRequest": {
 			const request = await prisma.maintenanceRequest.findUnique({
 				where: { id: resourceId },
 				select: { tenantId: true, roomId: true },
 			});
-			if (!request) return false;
-
-			if (request.tenantId === userId) return true;
-
-			const room = await prisma.room.findUnique({
-				where: { id: request.roomId },
-				include: {
-					flat: {
-						include: {
-							building: {
-								include: { property: { select: { landlordId: true } } },
-							},
-						},
-					},
-				},
-			});
-			return room?.flat.building.property.landlordId === userId;
+			return ownsViaTenantOrRoom(request, userId);
 		}
 		case "rent": {
 			const rent = await prisma.rent.findUnique({
 				where: { id: resourceId },
 				select: { tenantId: true, roomId: true },
 			});
-			if (!rent) return false;
-
-			if (rent.tenantId === userId) return true;
-
-			const room = await prisma.room.findUnique({
-				where: { id: rent.roomId },
-				include: {
-					flat: {
-						include: {
-							building: {
-								include: { property: { select: { landlordId: true } } },
-							},
-						},
-					},
-				},
-			});
-			return room?.flat.building.property.landlordId === userId;
+			return ownsViaTenantOrRoom(rent, userId);
 		}
 		case "utilityBill": {
 			const bill = await prisma.utilityBill.findUnique({
 				where: { id: resourceId },
-				include: {
-					room: {
-						include: {
-							flat: {
-								include: {
-									building: {
-										include: { property: { select: { landlordId: true } } },
-									},
-								},
-							},
-						},
-					},
-				},
+				select: { roomId: true },
 			});
-			return bill?.room.flat.building.property.landlordId === userId;
+			if (!bill) return false;
+			return (await landlordIdOfRoom(bill.roomId)) === userId;
 		}
 		case "rentalDocument": {
 			const doc = await prisma.rentalDocument.findUnique({
 				where: { id: resourceId },
-				include: {
-					application: {
-						include: {
-							room: {
-								include: {
-									flat: {
-										include: {
-											building: {
-												include: { property: { select: { landlordId: true } } },
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				select: { application: { select: { roomId: true } } },
 			});
-			return doc?.application.room.flat.building.property.landlordId === userId;
+			if (!doc) return false;
+			return (await landlordIdOfRoom(doc.application.roomId)) === userId;
 		}
 		case "viewingRequest": {
 			const request = await prisma.propertyViewingRequest.findUnique({
 				where: { id: resourceId },
 				select: { tenantId: true, roomId: true },
 			});
-			if (!request) return false;
-
-			if (request.tenantId === userId) return true;
-
-			const room = await prisma.room.findUnique({
-				where: { id: request.roomId },
-				include: {
-					flat: {
-						include: {
-							building: {
-								include: { property: { select: { landlordId: true } } },
-							},
-						},
-					},
-				},
-			});
-			return room?.flat.building.property.landlordId === userId;
+			return ownsViaTenantOrRoom(request, userId);
 		}
 		case "roommateMatch": {
 			const match = await prisma.roommateMatch.findUnique({
@@ -657,16 +582,7 @@ export async function hasPermission(
 	return true;
 }
 
-export function canAccessResource(
-	context: PermissionContext,
-	action: PermissionAction,
-	resourceType: ResourceType,
-): Promise<boolean> {
-	return hasPermission(context, action, resourceType);
-}
-
 export const PermissionUtils = {
 	hasPermission,
-	canAccessResource,
 	checkResourceOwnership,
 };

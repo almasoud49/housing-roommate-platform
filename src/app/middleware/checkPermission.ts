@@ -1,31 +1,33 @@
 import type { NextFunction, Request, Response } from "express";
-import { Role } from "../../generated/prisma/client";
-import { AppError } from "../utils/AppError";
 import httpStatus from "http-status";
+import { AppError } from "../utils/AppError";
+import { catchAsync } from "../utils/catchAsync";
+import { requireUser } from "../utils/request";
 import {
 	hasPermission,
 	type PermissionAction,
 	type ResourceType,
 } from "../utils/permissions";
 
+const resolveResourceId = (
+	req: Request,
+	getResourceId?: (req: Request) => string | undefined,
+) =>
+	getResourceId ? getResourceId(req) : (req.params.id as string) || undefined;
+
 export const checkPermission = (
 	action: PermissionAction,
 	resourceType: ResourceType,
 	getResourceId?: (req: Request) => string | undefined,
 ) => {
-	return async (req: Request, res: Response, next: NextFunction) => {
-		if (!req.user) {
-			throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-		}
-
-		const resourceId = getResourceId
-			? getResourceId(req)
-			: (req.params.id as string) || undefined;
+	return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+		const user = requireUser(req);
+		const resourceId = resolveResourceId(req, getResourceId);
 
 		const hasAccess = await hasPermission(
 			{
-				userId: req.user.userId,
-				role: req.user.role,
+				userId: user.userId,
+				role: user.role,
 				resourceId,
 				resourceType,
 			},
@@ -41,44 +43,26 @@ export const checkPermission = (
 		}
 
 		next();
-	};
+	});
 };
 
+// Legacy alias: ownership check === permission check for the "update" action.
 export const checkOwnership = (
 	resourceType: ResourceType,
 	getResourceId?: (req: Request) => string | undefined,
 ) => {
-	return async (req: Request, res: Response, next: NextFunction) => {
-		if (!req.user) {
-			throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-		}
-
-		const resourceId = getResourceId
-			? getResourceId(req)
-			: (req.params.id as string) || undefined;
+	return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+		requireUser(req);
+		const resourceId = resolveResourceId(req, getResourceId);
 
 		if (!resourceId) {
 			throw new AppError(httpStatus.BAD_REQUEST, "Resource ID is required");
 		}
 
-		const hasAccess = await hasPermission(
-			{
-				userId: req.user.userId,
-				role: req.user.role,
-				resourceId,
-				resourceType,
-			},
-			"update",
-			resourceType,
+		return checkPermission("update", resourceType, () => resourceId)(
+			req,
+			res,
+			next,
 		);
-
-		if (!hasAccess) {
-			throw new AppError(
-				httpStatus.FORBIDDEN,
-				"You don't have permission to access this resource",
-			);
-		}
-
-		next();
-	};
+	});
 };
