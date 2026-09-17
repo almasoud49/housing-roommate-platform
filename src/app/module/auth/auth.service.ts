@@ -9,6 +9,7 @@ import { googleClient } from "../../lib/googleAuth";
 import { transporter } from "../../lib/nodemailer";
 import { prisma } from "../../lib/prisma";
 import { redisClient } from "../../lib/redis";
+import { UserService } from "../user/user.service";
 import { AppError } from "../../utils/AppError";
 import { jwtUtils } from "../../utils/jwt";
 import type {
@@ -578,31 +579,7 @@ const logoutUser = async (userId: string): Promise<{ message: string }> => {
 };
 
 const getMe = async (userId: string) => {
-	const user = await prisma.user.findUnique({
-		where: { id: userId },
-		include: { profile: true },
-	});
-
-	if (!user) {
-		throw new AppError(httpStatus.NOT_FOUND, "User not found");
-	}
-
-	return {
-		id: user.id,
-		email: user.email,
-		name: user.name,
-		role: user.role,
-		emailVerified: user.emailVerified,
-		status: user.status,
-		authProvider: user.authProvider,
-		profile: user.profile
-			? {
-					phoneNumber: user.profile.phoneNumber,
-					bio: user.profile.bio,
-					avatarUrl: user.profile.avatarUrl,
-				}
-			: null,
-	};
+	return UserService.getMe(userId);
 };
 
 export const AuthService = {

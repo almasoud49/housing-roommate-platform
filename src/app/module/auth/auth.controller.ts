@@ -1,7 +1,8 @@
 import type { Request, Response } from "express";
 import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { requireUserId } from "../../utils/request";
+import { sendCreated, sendOk } from "../../utils/sendResponse";
 import { AuthService } from "./auth.service";
 import { AppError } from "../../utils/AppError";
 import { jwtUtils } from "../../utils/jwt";
@@ -18,12 +19,7 @@ const register = catchAsync(async (req: Request, res: Response) => {
 	const payload = req.body as IRegisterUserPayload;
 	const result = await AuthService.registerUser(payload);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.CREATED,
-		message: result.message,
-		data: null,
-	});
+	sendCreated(res, result.message, null);
 });
 
 const verifyEmail = catchAsync(async (req: Request, res: Response) => {
@@ -32,14 +28,9 @@ const verifyEmail = catchAsync(async (req: Request, res: Response) => {
 
 	jwtUtils.setAuthCookies(res, result.accessToken, result.refreshToken);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Email verified successfully",
-		data: {
-			accessToken: result.accessToken,
-			user: result.user,
-		},
+	sendOk(res, "Email verified successfully", {
+		accessToken: result.accessToken,
+		user: result.user,
 	});
 });
 
@@ -49,12 +40,7 @@ const login = catchAsync(async (req: Request, res: Response) => {
 
 	jwtUtils.setAuthCookies(res, result.accessToken, result.refreshToken);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Login successful",
-		data: { accessToken: result.accessToken },
-	});
+	sendOk(res, "Login successful", { accessToken: result.accessToken });
 });
 
 const googleLogin = catchAsync(async (req: Request, res: Response) => {
@@ -63,36 +49,21 @@ const googleLogin = catchAsync(async (req: Request, res: Response) => {
 
 	jwtUtils.setAuthCookies(res, result.accessToken, result.refreshToken);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Google login successful",
-		data: { accessToken: result.accessToken },
-	});
+	sendOk(res, "Google login successful", { accessToken: result.accessToken });
 });
 
 const forgotPassword = catchAsync(async (req: Request, res: Response) => {
 	const payload = req.body as IForgotPasswordPayload;
 	const result = await AuthService.forgotPassword(payload);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: result.message,
-		data: null,
-	});
+	sendOk(res, result.message, null);
 });
 
 const resetPassword = catchAsync(async (req: Request, res: Response) => {
 	const payload = req.body as IResetPasswordPayload;
 	const result = await AuthService.resetPassword(payload);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: result.message,
-		data: null,
-	});
+	sendOk(res, result.message, null);
 });
 
 const refreshAccessToken = catchAsync(async (req: Request, res: Response) => {
@@ -106,12 +77,7 @@ const refreshAccessToken = catchAsync(async (req: Request, res: Response) => {
 
 	jwtUtils.setAuthCookies(res, result.accessToken, result.refreshToken);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Access token refreshed",
-		data: { accessToken: result.accessToken },
-	});
+	sendOk(res, "Access token refreshed", { accessToken: result.accessToken });
 });
 
 const logout = catchAsync(async (req: Request, res: Response) => {
@@ -121,27 +87,15 @@ const logout = catchAsync(async (req: Request, res: Response) => {
 
 	jwtUtils.clearAuthCookies(res);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Logged out successfully",
-		data: null,
-	});
+	sendOk(res, "Logged out successfully", null);
 });
 
 const getMe = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
-	const result = await AuthService.getMe(req.user.userId);
+	const result = await AuthService.getMe(userId);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "User profile retrieved",
-		data: result,
-	});
+	sendOk(res, "User profile retrieved", result);
 });
 
 export const AuthController = {
