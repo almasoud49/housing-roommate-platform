@@ -1,5 +1,3 @@
-import type { Role } from "../../../generated/prisma/client";
-
 export interface ICreateRoomPayload {
 	flatId: string;
 	name: string;

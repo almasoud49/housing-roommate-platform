@@ -1,23 +1,16 @@
 import type { Request, Response } from "express";
-import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { requireUserId } from "../../utils/request";
+import { parseListParams } from "../../utils/query";
+import { sendCreated, sendOk, sendPaginated } from "../../utils/sendResponse";
 import { RoomService } from "./room.service";
-import { AppError } from "../../utils/AppError";
 
 const createRoom = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
-	const result = await RoomService.createRoom(req.user.userId, req.body);
+	const result = await RoomService.createRoom(userId, req.body);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.CREATED,
-		message: "Room created successfully",
-		data: result,
-	});
+	sendCreated(res, "Room created successfully", result);
 });
 
 const getRooms = catchAsync(async (req: Request, res: Response) => {
@@ -32,27 +25,16 @@ const getRooms = catchAsync(async (req: Request, res: Response) => {
 		maxPrice: req.query.maxPrice
 			? parseFloat(req.query.maxPrice as string)
 			: undefined,
-		page: req.query.page ? parseInt(req.query.page as string) : 1,
-		limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-		sortBy: (req.query.sortBy as string) || "createdAt",
-		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+		...parseListParams(req.query),
 	};
 
 	const result = await RoomService.getRooms(filters);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Rooms retrieved successfully",
-		data: result.data,
-		meta: result.meta,
-	});
+	sendPaginated(res, "Rooms retrieved successfully", result.data, result.meta);
 });
 
 const getMyRooms = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const filters = {
 		isActive: req.query.isActive ? req.query.isActive === "true" : undefined,
@@ -64,21 +46,17 @@ const getMyRooms = catchAsync(async (req: Request, res: Response) => {
 		maxPrice: req.query.maxPrice
 			? parseFloat(req.query.maxPrice as string)
 			: undefined,
-		page: req.query.page ? parseInt(req.query.page as string) : 1,
-		limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-		sortBy: (req.query.sortBy as string) || "createdAt",
-		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+		...parseListParams(req.query),
 	};
 
-	const result = await RoomService.getMyRooms(req.user.userId, filters);
+	const result = await RoomService.getMyRooms(userId, filters);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "My rooms retrieved successfully",
-		data: result.data,
-		meta: result.meta,
-	});
+	sendPaginated(
+		res,
+		"My rooms retrieved successfully",
+		result.data,
+		result.meta,
+	);
 });
 
 const getRoomById = catchAsync(async (req: Request, res: Response) => {
@@ -86,44 +64,25 @@ const getRoomById = catchAsync(async (req: Request, res: Response) => {
 
 	const result = await RoomService.getRoomById(id);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Room retrieved successfully",
-		data: result,
-	});
+	sendOk(res, "Room retrieved successfully", result);
 });
 
 const updateRoom = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const { id } = req.params as { id: string };
-	const result = await RoomService.updateRoom(id, req.user.userId, req.body);
+	const result = await RoomService.updateRoom(id, userId, req.body);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Room updated successfully",
-		data: result,
-	});
+	sendOk(res, "Room updated successfully", result);
 });
 
 const deleteRoom = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const { id } = req.params as { id: string };
-	await RoomService.deleteRoom(id, req.user.userId);
+	await RoomService.deleteRoom(id, userId);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Room deleted successfully",
-		data: null,
-	});
+	sendOk(res, "Room deleted successfully", null);
 });
 
 export const RoomController = {

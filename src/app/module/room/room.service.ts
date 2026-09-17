@@ -11,15 +11,12 @@ import type {
 import type { Prisma } from "../../../generated/prisma/client";
 import { roomWithFlatBuildingPropertyInclude } from "../../utils/includes";
 import {
-	buildPagination,
-	buildOrderBy,
 	buildMeta,
+	buildPagination,
 	buildSearchConditions,
-	applyFilters,
 	buildDateRangeFilter,
 	buildNumberRangeFilter,
 } from "../../utils/query";
-import { assertNotDeleted, assertOwnership } from "../../utils/auth";
 
 const createRoom = async (
 	landlordId: string,
@@ -79,7 +76,7 @@ const getRooms = async (filters: IRoomFilters): Promise<IRoomListResponse> => {
 		sortOrder = "desc",
 	} = filters;
 
-	const conditions: Prisma.RoomWhereInput[] = [];
+	const conditions: Prisma.RoomWhereInput[] = [{ deletedAt: null }];
 
 	if (flatId) {
 		conditions.push({ flatId });
@@ -154,13 +151,13 @@ const getRooms = async (filters: IRoomFilters): Promise<IRoomListResponse> => {
 
 	return {
 		data: rooms as IRoomResponse[],
-		meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+		meta: buildMeta(page, limit, total),
 	};
 };
 
 const getRoomById = async (id: string): Promise<IRoomResponse> => {
-	const room = await prisma.room.findUnique({
-		where: { id },
+	const room = await prisma.room.findFirst({
+		where: { id, deletedAt: null },
 		include: roomWithFlatBuildingPropertyInclude,
 	});
 
@@ -176,8 +173,8 @@ const updateRoom = async (
 	landlordId: string,
 	payload: IUpdateRoomPayload,
 ): Promise<IRoomResponse> => {
-	const room = await prisma.room.findUnique({
-		where: { id },
+	const room = await prisma.room.findFirst({
+		where: { id, deletedAt: null },
 		include: {
 			flat: {
 				include: {
@@ -218,8 +215,8 @@ const updateRoom = async (
 };
 
 const deleteRoom = async (id: string, landlordId: string): Promise<void> => {
-	const room = await prisma.room.findUnique({
-		where: { id },
+	const room = await prisma.room.findFirst({
+		where: { id, deletedAt: null },
 		include: {
 			flat: {
 				include: {
@@ -244,7 +241,10 @@ const deleteRoom = async (id: string, landlordId: string): Promise<void> => {
 		);
 	}
 
-	await prisma.room.delete({ where: { id } });
+	await prisma.room.update({
+		where: { id },
+		data: { deletedAt: new Date() },
+	});
 };
 
 const getMyRooms = async (
@@ -278,7 +278,10 @@ const getMyRooms = async (
 		sortOrder = "desc",
 	} = filters;
 
-	const conditions: Prisma.RoomWhereInput[] = [{ flatId: { in: flatIds } }];
+	const conditions: Prisma.RoomWhereInput[] = [
+		{ flatId: { in: flatIds } },
+		{ deletedAt: null },
+	];
 
 	if (isActive !== undefined) {
 		conditions.push({ isActive });
@@ -343,7 +346,7 @@ const getMyRooms = async (
 
 	return {
 		data: rooms as IRoomResponse[],
-		meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+		meta: buildMeta(page, limit, total),
 	};
 };
 

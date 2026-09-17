@@ -16,13 +16,13 @@ router.post(
 router.get(
 	"/",
 	auth(),
-	validateRequest(RoomValidation.roomFiltersSchema),
+	validateRequest(RoomValidation.roomFiltersSchema, "query"),
 	RoomController.getRooms,
 );
 router.get(
 	"/my-rooms",
 	auth("LANDLORD"),
-	validateRequest(RoomValidation.roomFiltersSchema),
+	validateRequest(RoomValidation.roomFiltersSchema, "query"),
 	RoomController.getMyRooms,
 );
 router.get("/:id", auth(), RoomController.getRoomById);
