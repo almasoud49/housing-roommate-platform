@@ -1,4 +1,5 @@
 import httpStatus from "http-status";
+import type { Role } from "../../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import type {
@@ -23,9 +24,31 @@ const mapProfile = (
 	};
 };
 
+const mapUserResponse = (
+	user: {
+		id: string;
+		email: string;
+		name: string;
+		role: Role;
+		emailVerified: boolean;
+		status: string;
+		authProvider: string;
+	},
+	profile: IUserProfileResponse["profile"],
+): IUserProfileResponse => ({
+	id: user.id,
+	email: user.email,
+	name: user.name,
+	role: user.role,
+	emailVerified: user.emailVerified,
+	status: user.status,
+	authProvider: user.authProvider,
+	profile,
+});
+
 const getMe = async (userId: string): Promise<IUserProfileResponse> => {
-	const user = await prisma.user.findUnique({
-		where: { id: userId },
+	const user = await prisma.user.findFirst({
+		where: { id: userId, deletedAt: null },
 		include: { profile: true },
 	});
 
@@ -33,24 +56,15 @@ const getMe = async (userId: string): Promise<IUserProfileResponse> => {
 		throw new AppError(httpStatus.NOT_FOUND, "User not found");
 	}
 
-	return {
-		id: user.id,
-		email: user.email,
-		name: user.name,
-		role: user.role,
-		emailVerified: user.emailVerified,
-		status: user.status,
-		authProvider: user.authProvider,
-		profile: mapProfile(user.profile),
-	};
+	return mapUserResponse(user, mapProfile(user.profile));
 };
 
 const updateProfile = async (
 	userId: string,
 	payload: IUpdateProfilePayload,
 ): Promise<IUserProfileResponse> => {
-	const user = await prisma.user.findUnique({
-		where: { id: userId },
+	const user = await prisma.user.findFirst({
+		where: { id: userId, deletedAt: null },
 		include: { profile: true },
 	});
 
@@ -58,38 +72,20 @@ const updateProfile = async (
 		throw new AppError(httpStatus.NOT_FOUND, "User not found");
 	}
 
+	const profileData = {
+		phoneNumber: payload.phoneNumber,
+		bio: payload.bio,
+		avatarUrl: payload.avatarUrl,
+		preferences: payload.preferences,
+	};
+
 	const updatedProfile = await prisma.profile.upsert({
 		where: { userId },
-		update: {
-			phoneNumber: payload.phoneNumber,
-			bio: payload.bio,
-			avatarUrl: payload.avatarUrl,
-			preferences: payload.preferences,
-		},
-		create: {
-			userId,
-			phoneNumber: payload.phoneNumber,
-			bio: payload.bio,
-			avatarUrl: payload.avatarUrl,
-			preferences: payload.preferences,
-		},
+		update: profileData,
+		create: { userId, ...profileData },
 	});
 
-	return {
-		id: user.id,
-		email: user.email,
-		name: user.name,
-		role: user.role,
-		emailVerified: user.emailVerified,
-		status: user.status,
-		authProvider: user.authProvider,
-		profile: {
-			phoneNumber: updatedProfile.phoneNumber ?? undefined,
-			bio: updatedProfile.bio ?? undefined,
-			avatarUrl: updatedProfile.avatarUrl ?? undefined,
-			preferences: updatedProfile.preferences ?? undefined,
-		},
-	};
+	return mapUserResponse(user, mapProfile(updatedProfile));
 };
 
 export const UserService = {
