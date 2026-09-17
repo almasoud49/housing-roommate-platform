@@ -1,30 +1,22 @@
 import type { Request, Response } from "express";
-import httpStatus from "http-status";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
-import { AdminService } from "./admin.service";
 import type { Role, UserStatus } from "../../../generated/prisma/client";
+import { catchAsync } from "../../utils/catchAsync";
+import { requireUser } from "../../utils/request";
+import { parseListParams } from "../../utils/query";
+import { sendForbidden, sendOk, sendPaginated } from "../../utils/sendResponse";
+import { AdminService } from "./admin.service";
 
 const getUsers = catchAsync(async (req: Request, res: Response) => {
 	const filters = {
 		role: (req.query.role as Role) || undefined,
 		status: (req.query.status as UserStatus) || undefined,
 		search: (req.query.search as string) || undefined,
-		page: req.query.page ? parseInt(req.query.page as string) : 1,
-		limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-		sortBy: (req.query.sortBy as string) || "createdAt",
-		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+		...parseListParams(req.query),
 	};
 
 	const result = await AdminService.getUsers(filters);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Users retrieved successfully",
-		data: result.data,
-		meta: result.meta,
-	});
+	sendPaginated(res, "Users retrieved successfully", result.data, result.meta);
 });
 
 const getUserById = catchAsync(async (req: Request, res: Response) => {
@@ -32,12 +24,7 @@ const getUserById = catchAsync(async (req: Request, res: Response) => {
 
 	const result = await AdminService.getUserById(id);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "User retrieved successfully",
-		data: result,
-	});
+	sendOk(res, "User retrieved successfully", result);
 });
 
 const updateUserRole = catchAsync(async (req: Request, res: Response) => {
@@ -45,12 +32,7 @@ const updateUserRole = catchAsync(async (req: Request, res: Response) => {
 
 	const result = await AdminService.updateUserRole(id, req.body);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "User role updated successfully",
-		data: result,
-	});
+	sendOk(res, "User role updated successfully", result);
 });
 
 const updateUserStatus = catchAsync(async (req: Request, res: Response) => {
@@ -58,12 +40,7 @@ const updateUserStatus = catchAsync(async (req: Request, res: Response) => {
 
 	const result = await AdminService.updateUserStatus(id, req.body);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "User status updated successfully",
-		data: result,
-	});
+	sendOk(res, "User status updated successfully", result);
 });
 
 const deleteUser = catchAsync(async (req: Request, res: Response) => {
@@ -71,70 +48,45 @@ const deleteUser = catchAsync(async (req: Request, res: Response) => {
 
 	await AdminService.deleteUser(id);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "User deleted successfully",
-		data: null,
-	});
+	sendOk(res, "User deleted successfully", null);
 });
 
 const getStats = catchAsync(async (req: Request, res: Response) => {
 	const result = await AdminService.getStats();
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Dashboard stats retrieved successfully",
-		data: result,
-	});
+	sendOk(res, "Dashboard stats retrieved successfully", result);
 });
 
 const getLandlordDashboard = catchAsync(async (req: Request, res: Response) => {
-	const userId = req.user!.userId;
-	const userRole = req.user!.role;
+	const user = requireUser(req);
+	const userId = user.userId;
+	const userRole = user.role;
 
 	if (userRole !== "LANDLORD" && userRole !== "ADMIN") {
-		return sendResponse(res, {
-			success: false,
-			statusCode: httpStatus.FORBIDDEN,
-			message: "Only landlords can access this dashboard",
-			data: null,
-		});
+		return sendForbidden(res, "Only landlords can access this dashboard");
 	}
 
 	const result = await AdminService.getLandlordDashboard(userId);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Landlord dashboard retrieved successfully",
-		data: result,
-	});
+	sendOk(res, "Landlord dashboard retrieved successfully", result);
 });
 
 const getPropertyManagerDashboard = catchAsync(
 	async (req: Request, res: Response) => {
-		const userId = req.user!.userId;
-		const userRole = req.user!.role;
+		const user = requireUser(req);
+		const userId = user.userId;
+		const userRole = user.role;
 
 		if (userRole !== "PROPERTY_MANAGER" && userRole !== "ADMIN") {
-			return sendResponse(res, {
-				success: false,
-				statusCode: httpStatus.FORBIDDEN,
-				message: "Only property managers can access this dashboard",
-				data: null,
-			});
+			return sendForbidden(
+				res,
+				"Only property managers can access this dashboard",
+			);
 		}
 
 		const result = await AdminService.getPropertyManagerDashboard(userId);
 
-		sendResponse(res, {
-			success: true,
-			statusCode: httpStatus.OK,
-			message: "Property manager dashboard retrieved successfully",
-			data: result,
-		});
+		sendOk(res, "Property manager dashboard retrieved successfully", result);
 	},
 );
 
@@ -143,21 +95,17 @@ const getAuditLogs = catchAsync(async (req: Request, res: Response) => {
 		action: (req.query.action as string) || undefined,
 		entityType: (req.query.entityType as string) || undefined,
 		userId: (req.query.userId as string) || undefined,
-		page: req.query.page ? parseInt(req.query.page as string) : 1,
-		limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-		sortBy: (req.query.sortBy as string) || "createdAt",
-		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+		...parseListParams(req.query),
 	};
 
 	const result = await AdminService.getAuditLogs(filters);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Audit logs retrieved successfully",
-		data: result.data,
-		meta: result.meta,
-	});
+	sendPaginated(
+		res,
+		"Audit logs retrieved successfully",
+		result.data,
+		result.meta,
+	);
 });
 
 export const AdminController = {

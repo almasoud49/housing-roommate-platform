@@ -1,15 +1,15 @@
 import { Router } from "express";
+import { auth } from "../../middleware/checkAuth";
+import { validateRequest } from "../../middleware/validateRequest";
 import { AdminController } from "./admin.controller";
 import { AdminValidation } from "./admin.validation";
-import { validateRequest } from "../../middleware/validateRequest";
-import { auth } from "../../middleware/checkAuth";
 
 const router = Router();
 
 router.get(
 	"/users",
 	auth("ADMIN"),
-	validateRequest(AdminValidation.adminUserFiltersSchema),
+	validateRequest(AdminValidation.adminUserFiltersSchema, "query"),
 	AdminController.getUsers,
 );
 router.get("/users/:id", auth("ADMIN"), AdminController.getUserById);
@@ -30,7 +30,7 @@ router.get("/stats", auth("ADMIN"), AdminController.getStats);
 router.get(
 	"/audit-logs",
 	auth("ADMIN"),
-	validateRequest(AdminValidation.auditLogFiltersSchema),
+	validateRequest(AdminValidation.auditLogFiltersSchema, "query"),
 	AdminController.getAuditLogs,
 );
 

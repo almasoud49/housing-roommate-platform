@@ -1,26 +1,26 @@
 import httpStatus from "http-status";
+import type { Prisma } from "../../../generated/prisma/client";
+import {
+	ApplicationStatus,
+	MaintenanceStatus,
+	PaymentStatus,
+	Role,
+} from "../../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import type {
+	IAdminStatsResponse,
 	IAdminUserFilters,
 	IAdminUserListResponse,
 	IAdminUserResponse,
-	IUpdateUserRolePayload,
-	IUpdateUserStatusPayload,
-	IAdminStatsResponse,
 	IAuditLogFilters,
 	IAuditLogListResponse,
 	ILandlordDashboardResponse,
 	IPropertyManagerDashboardResponse,
+	IUpdateUserRolePayload,
+	IUpdateUserStatusPayload,
 } from "./admin.interface";
-import {
-	Role,
-	UserStatus,
-	ApplicationStatus,
-	PaymentStatus,
-	MaintenanceStatus,
-} from "../../../generated/prisma/client";
-import type { Prisma } from "../../../generated/prisma/client";
+import { buildMeta } from "../../utils/query";
 
 const mapProfile = (
 	profile: {
@@ -106,12 +106,7 @@ const getUsers = async (
 			createdAt: user.createdAt,
 			profile: mapProfile(user.profile),
 		})) as IAdminUserResponse[],
-		meta: {
-			page,
-			limit,
-			total,
-			totalPages: Math.ceil(total / limit),
-		},
+		meta: buildMeta(page, limit, total),
 	};
 };
 
@@ -350,12 +345,7 @@ const getAuditLogs = async (
 
 	return {
 		data: auditLogs as IAuditLogListResponse["data"],
-		meta: {
-			page,
-			limit,
-			total,
-			totalPages: Math.ceil(total / limit),
-		},
+		meta: buildMeta(page, limit, total),
 	};
 };
 
@@ -546,10 +536,6 @@ const getLandlordDashboard = async (
 const getPropertyManagerDashboard = async (
 	managerId: string,
 ): Promise<IPropertyManagerDashboardResponse> => {
-	// Get properties managed by this property manager
-	// Assuming property manager is assigned to properties via a relation or through buildings
-	// For now, we'll get all properties where the manager is the landlord (if they own properties)
-	// Or we can add a managedBy field to Property model later
 	const properties = await prisma.property.findMany({
 		where: { landlordId: managerId, deletedAt: null },
 		select: { id: true },
@@ -736,15 +722,6 @@ const getPropertyManagerDashboard = async (
 };
 
 // Helper to get user names for dashboard data
-const getUserNames = async (
-	userIds: string[],
-): Promise<Record<string, string>> => {
-	const users = await prisma.user.findMany({
-		where: { id: { in: userIds } },
-		select: { id: true, name: true },
-	});
-	return users.reduce((acc, u) => ({ ...acc, [u.id]: u.name }), {});
-};
 
 const getTenantNamesForDashboard = async (
 	tenantIds: string[],
