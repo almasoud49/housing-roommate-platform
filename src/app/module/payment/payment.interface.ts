@@ -25,6 +25,7 @@ export interface IBkashCreatePaymentPayload {
 	currency: string;
 	intent: string;
 	merchantInvoiceNumber: string;
+	payerReference: string;
 }
 
 export interface IBkashExecutePaymentPayload {

@@ -6,19 +6,15 @@ import config from "../../config";
 import type {
 	IInitiatePaymentPayload,
 	IBkashPaymentResponse,
+	IBkashCreatePaymentPayload,
+	IBkashExecutePaymentPayload,
+	IBkashQueryPaymentPayload,
 	IBkashRefundPayload,
 } from "./payment.interface";
 import type { Prisma } from "../../../generated/prisma/client";
-import { redisClient } from "../../lib/redis";
+import { redisManager } from "../../lib/redis";
+import { getBkashIdToken } from "../../lib/bkash";
 import { PaymentStatus, RentStatus } from "../../../generated/prisma/client";
-import { notifyRentPaid } from "../../utils/notification";
-
-interface BkashTokenResponse {
-	id_token: string;
-	token_type: string;
-	expires_in: number;
-	refresh_token: string;
-}
 
 interface BkashCreatePaymentResponse {
 	paymentID: string;
@@ -63,236 +59,92 @@ interface BkashRefundResponse {
 	executedTime: string;
 }
 
-const BKASH_TOKEN_KEY = "bkash:access_token";
-const BKASH_REFRESH_TOKEN_KEY = "bkash:refresh_token";
+const getBkashAuthHeaders = async (): Promise<Record<string, string>> => ({
+	Authorization: await getBkashIdToken(),
+	"X-APP-Key": config.bkash_app_key!,
+});
 
-const getBkashAuthHeaders = async (): Promise<Record<string, string>> => {
-	const now = Date.now();
-
-	const [accessToken, accessTokenTTL, refreshToken] = await Promise.all([
-		redisClient.get(BKASH_TOKEN_KEY),
-		redisClient.ttl(BKASH_TOKEN_KEY),
-		redisClient.get(BKASH_REFRESH_TOKEN_KEY),
-	]);
-
-	if (accessToken && accessTokenTTL > 600) {
-		return {
-			Authorization: accessToken,
-			"X-APP-Key": config.bkash_app_key!,
-		};
-	}
-
-	if (refreshToken && accessTokenTTL <= 600) {
-		const refreshResponse = await fetch(
-			`${config.bkash_base_url}/tokenized/checkout/token/refresh`,
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Accept: "application/json",
-					username: config.bkash_username,
-					password: config.bkash_password,
-				},
-				body: JSON.stringify({
-					app_key: config.bkash_app_key,
-					app_secret: config.bkash_app_secret,
-					refresh_token: refreshToken,
-				}),
-			},
-		);
-
-		if (!refreshResponse.ok) {
-			throw new AppError(
-				httpStatus.BAD_GATEWAY,
-				"Bkash Access Token Grant Failed",
-			);
-		}
-
-		const refreshResult = await refreshResponse.json();
-		const newAccessToken = refreshResult.id_token;
-
-		await redisClient.set(BKASH_TOKEN_KEY, newAccessToken, {
-			expiration: { type: "EX", value: 60 * 60 },
-		});
-
-		return {
-			Authorization: newAccessToken,
-			"X-APP-Key": config.bkash_app_key!,
-		};
-	}
-
-	const credentials = `${config.bkash_username}:${config.bkash_password}`;
-	const encodedCredentials = Buffer.from(credentials).toString("base64");
-
-	const response = await fetch(
-		`${config.bkash_base_url}/tokenized/checkout/token/grant`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: `Basic ${encodedCredentials}`,
-				"X-APP-Key": config.bkash_app_key!,
-			},
-			body: JSON.stringify({
-				app_key: config.bkash_app_key,
-				app_secret: config.bkash_app_secret,
-			}),
-		},
-	);
-
-	if (!response.ok) {
-		const error = await response.text();
-		throw new AppError(httpStatus.BAD_GATEWAY, `bKash token error: ${error}`);
-	}
-
-	const tokenData: BkashTokenResponse = await response.json();
-
-	await Promise.all([
-		redisClient.set(BKASH_TOKEN_KEY, tokenData.id_token, {
-			expiration: { type: "EX", value: tokenData.expires_in - 60 },
-		}),
-		redisClient.set(BKASH_REFRESH_TOKEN_KEY, tokenData.refresh_token, {
-			expiration: { type: "EX", value: 60 * 60 * 24 * 28 },
-		}),
-	]);
-
-	return {
-		Authorization: tokenData.id_token,
-		"X-APP-Key": config.bkash_app_key!,
-	};
-};
-
-const createBkashPayment = async (payload: {
-	amount: number;
-	currency: string;
-	intent: string;
-	merchantInvoiceNumber: string;
-}): Promise<BkashCreatePaymentResponse> => {
+// Single POST helper for all bKash checkout APIs: same headers, JSON body,
+// and error shape — only endpoint, body, and error prefix vary.
+const bkashPost = async <T>(
+	endpoint: string,
+	body: Record<string, unknown>,
+	errorPrefix: string,
+): Promise<T> => {
 	const headers = await getBkashAuthHeaders();
 
-	const response = await fetch(
-		`${config.bkash_base_url}/tokenized/checkout/create`,
-		{
-			method: "POST",
-			headers: {
-				...headers,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				mode: "0011",
-				payerReference: "",
-				callbackURL: config.bkash_callback_url,
-				amount: payload.amount.toString(),
-				currency: payload.currency,
-				intent: payload.intent,
-				merchantInvoiceNumber: payload.merchantInvoiceNumber,
-			}),
+	const response = await fetch(`${config.bkash_base_url}${endpoint}`, {
+		method: "POST",
+		headers: {
+			...headers,
+			"Content-Type": "application/json",
 		},
-	);
+		body: JSON.stringify(body),
+	});
 
 	if (!response.ok) {
 		const error = await response.text();
 		throw new AppError(
 			httpStatus.INTERNAL_SERVER_ERROR,
-			`bKash create payment error: ${error}`,
+			`${errorPrefix}: ${error}`,
 		);
 	}
 
-	return response.json();
+	return (await response.json()) as T;
+};
+
+const createBkashPayment = async (
+	payload: IBkashCreatePaymentPayload,
+): Promise<BkashCreatePaymentResponse> => {
+	return bkashPost<BkashCreatePaymentResponse>(
+		"/tokenized/checkout/create",
+		{
+			mode: "0011",
+			payerReference: payload.payerReference,
+			callbackURL: config.bkash_callback_url,
+			amount: payload.amount.toString(),
+			currency: payload.currency,
+			intent: payload.intent,
+			merchantInvoiceNumber: payload.merchantInvoiceNumber,
+		},
+		"bKash create payment error",
+	);
 };
 
 const executeBkashPayment = async (
-	paymentId: string,
+	payload: IBkashExecutePaymentPayload,
 ): Promise<BkashExecutePaymentResponse> => {
-	const headers = await getBkashAuthHeaders();
-
-	const response = await fetch(
-		`${config.bkash_base_url}/tokenized/checkout/execute`,
-		{
-			method: "POST",
-			headers: {
-				...headers,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ paymentID: paymentId }),
-		},
+	return bkashPost<BkashExecutePaymentResponse>(
+		"/tokenized/checkout/execute",
+		{ paymentID: payload.paymentId },
+		"bKash execute payment error",
 	);
-
-	if (!response.ok) {
-		const error = await response.text();
-		throw new AppError(
-			httpStatus.INTERNAL_SERVER_ERROR,
-			`bKash execute payment error: ${error}`,
-		);
-	}
-
-	return response.json();
 };
 
 const queryBkashPayment = async (
-	paymentId: string,
+	payload: IBkashQueryPaymentPayload,
 ): Promise<BkashQueryPaymentResponse> => {
-	const headers = await getBkashAuthHeaders();
-
-	const response = await fetch(
-		`${config.bkash_base_url}/tokenized/checkout/payment/status`,
-		{
-			method: "POST",
-			headers: {
-				...headers,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ paymentID: paymentId }),
-		},
+	return bkashPost<BkashQueryPaymentResponse>(
+		"/tokenized/checkout/payment/status",
+		{ paymentID: payload.paymentId },
+		"bKash query payment error",
 	);
-
-	if (!response.ok) {
-		const error = await response.text();
-		throw new AppError(
-			httpStatus.INTERNAL_SERVER_ERROR,
-			`bKash query payment error: ${error}`,
-		);
-	}
-
-	return response.json();
 };
 
-const refundBkashPayment = async (payload: {
-	paymentId: string;
-	amount: number;
-	currency: string;
-	invoiceNumber: string;
-	reason: string;
-}): Promise<BkashRefundResponse> => {
-	const headers = await getBkashAuthHeaders();
-
-	const response = await fetch(
-		`${config.bkash_base_url}/tokenized/checkout/refund`,
+const refundBkashPayment = async (
+	payload: IBkashRefundPayload,
+): Promise<BkashRefundResponse> => {
+	return bkashPost<BkashRefundResponse>(
+		"/tokenized/checkout/refund",
 		{
-			method: "POST",
-			headers: {
-				...headers,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				paymentID: payload.paymentId,
-				amount: payload.amount.toString(),
-				currency: payload.currency,
-				invoiceNumber: payload.invoiceNumber,
-				reason: payload.reason,
-			}),
+			paymentID: payload.paymentId,
+			amount: payload.amount.toString(),
+			currency: payload.currency,
+			invoiceNumber: payload.invoiceNumber,
+			reason: payload.reason,
 		},
+		"bKash refund error",
 	);
-
-	if (!response.ok) {
-		const error = await response.text();
-		throw new AppError(
-			httpStatus.INTERNAL_SERVER_ERROR,
-			`bKash refund error: ${error}`,
-		);
-	}
-
-	return response.json();
 };
 
 const verifyBkashSignature = (payload: string, signature: string): boolean => {
@@ -301,25 +153,18 @@ const verifyBkashSignature = (payload: string, signature: string): boolean => {
 		.update(payload)
 		.digest("hex");
 
-	return crypto.timingSafeEqual(
-		Buffer.from(signature),
-		Buffer.from(expectedSignature),
-	);
+	const received = Buffer.from(signature);
+	const expected = Buffer.from(expectedSignature);
+
+	// timingSafeEqual throws on length mismatch — unequal length means invalid
+	if (received.length !== expected.length) return false;
+
+	return crypto.timingSafeEqual(received, expected);
 };
 
-const mapPaymentToResponse = (payment: {
-	id: string;
-	applicationId: string;
-	tenantId: string;
-	amount: number;
-	currency: string;
-	status: string;
-	bkashPaymentId: string | null;
-	bkashCreateResponse: Prisma.JsonValue | null;
-	bkashExecuteResponse: Prisma.JsonValue | null;
-	createdAt: Date;
-	updatedAt: Date;
-}): IBkashPaymentResponse => {
+const mapPaymentToResponse = (
+	payment: Prisma.PaymentGetPayload<{}>,
+): IBkashPaymentResponse => {
 	return {
 		id: payment.id,
 		applicationId: payment.applicationId,
@@ -345,7 +190,7 @@ const initiatePayment = async (
 	idempotencyKey?: string,
 ): Promise<IBkashPaymentResponse> => {
 	if (idempotencyKey) {
-		const existing = await redisClient.get(
+		const existing = await redisManager.get(
 			`payment:idempotency:${idempotencyKey}`,
 		);
 		if (existing) {
@@ -359,16 +204,8 @@ const initiatePayment = async (
 	const application = await prisma.application.findUnique({
 		where: { id: payload.applicationId },
 		include: {
-			room: {
-				include: {
-					flat: {
-						include: {
-							building: {
-								include: { property: true },
-							},
-						},
-					},
-				},
+			tenant: {
+				include: { profile: true },
 			},
 		},
 	});
@@ -392,21 +229,22 @@ const initiatePayment = async (
 	}
 
 	const existingPayment = await prisma.payment.findFirst({
-		where: { applicationId: payload.applicationId },
+		where: { applicationId: payload.applicationId, deletedAt: null },
 	});
 
 	if (existingPayment) {
 		if (idempotencyKey) {
-			await redisClient.set(
+			await redisManager.set(
 				`payment:idempotency:${idempotencyKey}`,
 				existingPayment.id,
-				{
-					expiration: { type: "EX", value: 60 * 60 * 24 },
-				},
+				{ EX: 60 * 60 * 24 },
 			);
 		}
 		return mapPaymentToResponse(existingPayment);
 	}
+
+	const payerReference =
+		application.tenant?.profile?.phoneNumber || "01700000000";
 
 	const merchantInvoiceNumber = `INV-${application.id.slice(0, 8)}-${Date.now()}`;
 	const bkashCreateResponse = await createBkashPayment({
@@ -414,6 +252,7 @@ const initiatePayment = async (
 		currency: payload.currency || "BDT",
 		intent: "sale",
 		merchantInvoiceNumber,
+		payerReference,
 	});
 
 	const payment = await prisma.payment.create({
@@ -429,9 +268,13 @@ const initiatePayment = async (
 	});
 
 	if (idempotencyKey) {
-		await redisClient.set(`payment:idempotency:${idempotencyKey}`, payment.id, {
-			expiration: { type: "EX", value: 60 * 60 * 24 },
-		});
+		await redisManager.set(
+			`payment:idempotency:${idempotencyKey}`,
+			payment.id,
+			{
+				EX: 60 * 60 * 24,
+			},
+		);
 	}
 
 	return mapPaymentToResponse(payment);
@@ -443,7 +286,7 @@ const handleBkashCallback = async (
 	signature?: string,
 ): Promise<IBkashPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
-		where: { bkashPaymentId: paymentId },
+		where: { bkashPaymentId: paymentId, deletedAt: null },
 	});
 
 	if (!payment) {
@@ -458,7 +301,7 @@ const handleBkashCallback = async (
 	}
 
 	if (status === "success") {
-		const executeResponse = await executeBkashPayment(paymentId);
+		const executeResponse = await executeBkashPayment({ paymentId });
 
 		if (executeResponse.transactionStatus === "Completed") {
 			const updatedPayment = await prisma.$transaction(async (tx) => {
@@ -557,6 +400,7 @@ const getPaymentStatus = async (
 		where: {
 			applicationId,
 			tenantId,
+			deletedAt: null,
 		},
 	});
 
@@ -570,8 +414,8 @@ const getPaymentStatus = async (
 const getPaymentById = async (
 	paymentId: string,
 ): Promise<IBkashPaymentResponse> => {
-	const payment = await prisma.payment.findUnique({
-		where: { id: paymentId },
+	const payment = await prisma.payment.findFirst({
+		where: { id: paymentId, deletedAt: null },
 	});
 
 	if (!payment) {
@@ -585,14 +429,14 @@ const queryPaymentStatus = async (
 	bkashPaymentId: string,
 ): Promise<IBkashPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
-		where: { bkashPaymentId },
+		where: { bkashPaymentId, deletedAt: null },
 	});
 
 	if (!payment) {
 		throw new AppError(httpStatus.NOT_FOUND, "Payment not found");
 	}
 
-	const queryResponse = await queryBkashPayment(bkashPaymentId);
+	const queryResponse = await queryBkashPayment({ paymentId: bkashPaymentId });
 
 	let newStatus = payment.status;
 	if (queryResponse.transactionStatus === "Completed") {
@@ -616,7 +460,7 @@ const refundPayment = async (
 	payload: IBkashRefundPayload,
 ): Promise<IBkashPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
-		where: { bkashPaymentId: payload.paymentId },
+		where: { bkashPaymentId: payload.paymentId, deletedAt: null },
 	});
 
 	if (!payment) {

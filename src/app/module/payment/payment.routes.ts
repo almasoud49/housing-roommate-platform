@@ -13,6 +13,8 @@ router.post(
 	PaymentController.initiatePayment,
 );
 router.post("/bkash/callback", PaymentController.bkashCallback);
+// bKash redirects to the callback URL via GET with ?paymentID=&status=&signature=
+router.get("/bkash/callback", PaymentController.bkashCallback);
 router.get(
 	"/application/:applicationId",
 	auth("TENANT"),

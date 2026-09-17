@@ -1,34 +1,39 @@
 import type { Request, Response } from "express";
 import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { requireUserId } from "../../utils/request";
+import { sendCreated, sendOk } from "../../utils/sendResponse";
 import { PaymentService } from "./payment.service";
 import { AppError } from "../../utils/AppError";
 import type { IBkashRefundPayload } from "./payment.interface";
 
 const initiatePayment = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const idempotencyKey = req.headers["idempotency-key"] as string | undefined;
 
 	const result = await PaymentService.initiatePayment(
-		req.user.userId,
+		userId,
 		req.body,
 		idempotencyKey,
 	);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.CREATED,
-		message: "bKash payment initiated successfully",
-		data: result,
-	});
+	sendCreated(res, "bKash payment initiated successfully", result);
 });
 
 const bkashCallback = catchAsync(async (req: Request, res: Response) => {
-	const { paymentId, status } = req.body;
+	// bKash redirects via GET with ?paymentID=&status=&signature=,
+	// while manual tests POST JSON { paymentId, status }
+	const paymentId =
+		req.body?.paymentId ??
+		(req.query.paymentID as string | undefined) ??
+		(req.query.paymentId as string | undefined);
+	const status = req.body?.status ?? (req.query.status as string | undefined);
+	// Only verify webhook-style signatures sent via header. bKash's redirect
+	// `?signature=` query param is bKash-generated, not our HMAC, so it must
+	// not be fed into verifyBkashSignature (it would never match). The live
+	// `execute` call against bKash's API in the service is the real
+	// verification for redirect callbacks.
 	const signature = req.headers["x-bkash-signature"] as string | undefined;
 
 	if (!paymentId || !status) {
@@ -41,83 +46,47 @@ const bkashCallback = catchAsync(async (req: Request, res: Response) => {
 		signature,
 	);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "bKash payment callback processed successfully",
-		data: result,
-	});
+	sendOk(res, "bKash payment callback processed successfully", result);
 });
 
 const getPaymentStatus = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const { applicationId } = req.params as { applicationId: string };
 
-	const result = await PaymentService.getPaymentStatus(
-		applicationId,
-		req.user.userId,
-	);
+	const result = await PaymentService.getPaymentStatus(applicationId, userId);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Payment status retrieved successfully",
-		data: result,
-	});
+	sendOk(res, "Payment status retrieved successfully", result);
 });
 
 const getPaymentById = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	requireUserId(req);
 
 	const { id } = req.params as { id: string };
 
 	const result = await PaymentService.getPaymentById(id);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Payment retrieved successfully",
-		data: result,
-	});
+	sendOk(res, "Payment retrieved successfully", result);
 });
 
 const queryPaymentStatus = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	requireUserId(req);
 
 	const { bkashPaymentId } = req.params as { bkashPaymentId: string };
 
 	const result = await PaymentService.queryPaymentStatus(bkashPaymentId);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Payment status queried successfully",
-		data: result,
-	});
+	sendOk(res, "Payment status queried successfully", result);
 });
 
 const refundPayment = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	requireUserId(req);
 
 	const payload = req.body as IBkashRefundPayload;
 
 	const result = await PaymentService.refundPayment(payload);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Payment refunded successfully",
-		data: result,
-	});
+	sendOk(res, "Payment refunded successfully", result);
 });
 
 export const PaymentController = {
