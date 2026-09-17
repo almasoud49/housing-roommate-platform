@@ -1,7 +1,8 @@
 import type { Request, Response } from "express";
-import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { requireUserId } from "../../utils/request";
+import { parseListParams } from "../../utils/query";
+import { sendOk, sendPaginated } from "../../utils/sendResponse";
 import { VerificationService } from "./verification.service";
 import type {
 	IUploadVerificationDocsPayload,
@@ -10,7 +11,7 @@ import type {
 
 const uploadVerificationDocs = catchAsync(
 	async (req: Request, res: Response) => {
-		const userId = req.user!.userId;
+		const userId = requireUserId(req);
 		const payload = req.body as IUploadVerificationDocsPayload;
 
 		const result = await VerificationService.uploadVerificationDocs(
@@ -18,28 +19,21 @@ const uploadVerificationDocs = catchAsync(
 			payload,
 		);
 
-		sendResponse(res, {
-			success: true,
-			statusCode: httpStatus.OK,
-			message:
-				"Verification documents uploaded successfully. Awaiting admin review.",
-			data: result,
-		});
+		sendOk(
+			res,
+			"Verification documents uploaded successfully. Awaiting admin review.",
+			result,
+		);
 	},
 );
 
 const getMyVerificationStatus = catchAsync(
 	async (req: Request, res: Response) => {
-		const userId = req.user!.userId;
+		const userId = requireUserId(req);
 
 		const result = await VerificationService.getMyVerificationStatus(userId);
 
-		sendResponse(res, {
-			success: true,
-			statusCode: httpStatus.OK,
-			message: "Verification status retrieved",
-			data: result,
-		});
+		sendOk(res, "Verification status retrieved", result);
 	},
 );
 
@@ -51,36 +45,27 @@ const getPendingVerifications = catchAsync(
 				? req.query.isVerified === "true"
 				: undefined,
 			search: (req.query.search as string) || undefined,
-			page: req.query.page ? parseInt(req.query.page as string) : 1,
-			limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-			sortBy: (req.query.sortBy as string) || "createdAt",
-			sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+			...parseListParams(req.query),
 		};
 
 		const result = await VerificationService.getPendingVerifications(filters);
 
-		sendResponse(res, {
-			success: true,
-			statusCode: httpStatus.OK,
-			message: "Pending verifications retrieved",
-			data: result.data,
-			meta: result.meta,
-		});
+		sendPaginated(
+			res,
+			"Pending verifications retrieved",
+			result.data,
+			result.meta,
+		);
 	},
 );
 
 const reviewVerification = catchAsync(async (req: Request, res: Response) => {
-	const adminId = req.user!.userId;
+	const adminId = requireUserId(req);
 	const payload = req.body as IVerificationReviewPayload;
 
 	const result = await VerificationService.reviewVerification(adminId, payload);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: `Verification ${payload.action.toLowerCase()}d`,
-		data: result,
-	});
+	sendOk(res, `Verification ${payload.action.toLowerCase()}d`, result);
 });
 
 export const VerificationController = {

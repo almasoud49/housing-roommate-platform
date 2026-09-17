@@ -24,7 +24,7 @@ router.get(
 router.get(
 	"/pending",
 	auth(Role.ADMIN),
-	validateRequest(VerificationValidation.filtersSchema),
+	validateRequest(VerificationValidation.filtersSchema, "query"),
 	VerificationController.getPendingVerifications,
 );
 router.patch(

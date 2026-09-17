@@ -6,13 +6,14 @@ import type {
 	IVerificationReviewPayload,
 } from "./verification.interface";
 import type { Prisma } from "../../../generated/prisma/client";
+import { buildMeta } from "../../utils/query";
 
 const uploadVerificationDocs = async (
 	userId: string,
 	payload: IUploadVerificationDocsPayload,
 ) => {
-	const user = await prisma.user.findUnique({
-		where: { id: userId },
+	const user = await prisma.user.findFirst({
+		where: { id: userId, deletedAt: null },
 	});
 
 	if (!user) {
@@ -54,8 +55,8 @@ const uploadVerificationDocs = async (
 };
 
 const getMyVerificationStatus = async (userId: string) => {
-	const user = await prisma.user.findUnique({
-		where: { id: userId },
+	const user = await prisma.user.findFirst({
+		where: { id: userId, deletedAt: null },
 		select: {
 			id: true,
 			email: true,
@@ -133,12 +134,7 @@ const getPendingVerifications = async (filters: {
 
 	return {
 		data: users,
-		meta: {
-			page,
-			limit,
-			total,
-			totalPages: Math.ceil(total / limit),
-		},
+		meta: buildMeta(page, limit, total),
 	};
 };
 
@@ -146,8 +142,8 @@ const reviewVerification = async (
 	adminId: string,
 	payload: IVerificationReviewPayload,
 ) => {
-	const user = await prisma.user.findUnique({
-		where: { id: payload.userId },
+	const user = await prisma.user.findFirst({
+		where: { id: payload.userId, deletedAt: null },
 	});
 
 	if (!user) {
