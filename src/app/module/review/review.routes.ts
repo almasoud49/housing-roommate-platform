@@ -15,7 +15,7 @@ router.post(
 router.get(
 	"/",
 	auth(),
-	validateRequest(ReviewValidation.reviewFiltersSchema),
+	validateRequest(ReviewValidation.reviewFiltersSchema, "query"),
 	ReviewController.getReviews,
 );
 router.get("/:id", auth(), ReviewController.getReviewById);

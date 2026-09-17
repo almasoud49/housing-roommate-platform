@@ -8,6 +8,7 @@ import type {
 	IReviewResponse,
 } from "./review.interface";
 import type { Prisma } from "../../../generated/prisma/client";
+import { buildMeta } from "../../utils/query";
 
 const createReview = async (
 	reviewerId: string,
@@ -80,7 +81,7 @@ const getReviews = async (
 		sortOrder = "desc",
 	} = filters;
 
-	const andConditions: Prisma.ReviewWhereInput[] = [];
+	const andConditions: Prisma.ReviewWhereInput[] = [{ deletedAt: null }];
 
 	if (revieweeId) {
 		andConditions.push({ revieweeId });
@@ -136,18 +137,13 @@ const getReviews = async (
 
 	return {
 		data: reviews as IReviewResponse[],
-		meta: {
-			page,
-			limit,
-			total,
-			totalPages: Math.ceil(total / limit),
-		},
+		meta: buildMeta(page, limit, total),
 	};
 };
 
 const getReviewById = async (id: string): Promise<IReviewResponse> => {
-	const review = await prisma.review.findUnique({
-		where: { id },
+	const review = await prisma.review.findFirst({
+		where: { id, deletedAt: null },
 		include: {
 			reviewer: {
 				select: {
@@ -173,8 +169,34 @@ const getReviewById = async (id: string): Promise<IReviewResponse> => {
 	return review as IReviewResponse;
 };
 
+const deleteReview = async (
+	reviewId: string,
+	reviewerId: string,
+): Promise<void> => {
+	const review = await prisma.review.findFirst({
+		where: { id: reviewId, deletedAt: null },
+	});
+
+	if (!review) {
+		throw new AppError(httpStatus.NOT_FOUND, "Review not found");
+	}
+
+	if (review.reviewerId !== reviewerId) {
+		throw new AppError(
+			httpStatus.FORBIDDEN,
+			"You can only delete your own reviews",
+		);
+	}
+
+	await prisma.review.update({
+		where: { id: reviewId },
+		data: { deletedAt: new Date() },
+	});
+};
+
 export const ReviewService = {
 	createReview,
 	getReviews,
 	getReviewById,
+	deleteReview,
 };

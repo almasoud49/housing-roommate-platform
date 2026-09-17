@@ -1,43 +1,32 @@
 import type { Request, Response } from "express";
-import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { requireUserId } from "../../utils/request";
+import { parseListParams } from "../../utils/query";
+import { sendCreated, sendOk, sendPaginated } from "../../utils/sendResponse";
 import { ReviewService } from "./review.service";
-import { AppError } from "../../utils/AppError";
 
 const createReview = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
-	const result = await ReviewService.createReview(req.user.userId, req.body);
+	const result = await ReviewService.createReview(userId, req.body);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.CREATED,
-		message: "Review created successfully",
-		data: result,
-	});
+	sendCreated(res, "Review created successfully", result);
 });
 
 const getReviews = catchAsync(async (req: Request, res: Response) => {
 	const filters = {
 		revieweeId: (req.query.revieweeId as string) || undefined,
-		page: req.query.page ? parseInt(req.query.page as string) : 1,
-		limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-		sortBy: (req.query.sortBy as string) || "createdAt",
-		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+		...parseListParams(req.query),
 	};
 
 	const result = await ReviewService.getReviews(filters);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Reviews retrieved successfully",
-		data: result.data,
-		meta: result.meta,
-	});
+	sendPaginated(
+		res,
+		"Reviews retrieved successfully",
+		result.data,
+		result.meta,
+	);
 });
 
 const getReviewById = catchAsync(async (req: Request, res: Response) => {
@@ -45,12 +34,7 @@ const getReviewById = catchAsync(async (req: Request, res: Response) => {
 
 	const result = await ReviewService.getReviewById(id);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Review retrieved successfully",
-		data: result,
-	});
+	sendOk(res, "Review retrieved successfully", result);
 });
 
 export const ReviewController = {
