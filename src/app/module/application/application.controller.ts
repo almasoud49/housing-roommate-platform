@@ -1,121 +1,84 @@
 import type { Request, Response } from "express";
-import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { requireUserId } from "../../utils/request";
+import { parseListParams } from "../../utils/query";
+import { sendCreated, sendOk, sendPaginated } from "../../utils/sendResponse";
 import { ApplicationService } from "./application.service";
-import { AppError } from "../../utils/AppError";
 import type { ApplicationStatus } from "../../../generated/prisma/client";
 
 const createApplication = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
-	const result = await ApplicationService.createApplication(
-		req.user.userId,
-		req.body,
-	);
+	const result = await ApplicationService.createApplication(userId, req.body);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.CREATED,
-		message: "Application submitted successfully",
-		data: result,
-	});
+	sendCreated(res, "Application submitted successfully", result);
 });
 
 const getMyApplications = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const filters = {
 		status: (req.query.status as ApplicationStatus) || undefined,
-		page: req.query.page ? parseInt(req.query.page as string) : 1,
-		limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-		sortBy: (req.query.sortBy as string) || "createdAt",
-		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+		search: (req.query.search as string) || undefined,
+		...parseListParams(req.query),
 	};
 
-	const result = await ApplicationService.getMyApplications(
-		req.user.userId,
-		filters,
-	);
+	const result = await ApplicationService.getMyApplications(userId, filters);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "My applications retrieved successfully",
-		data: result.data,
-		meta: result.meta,
-	});
+	sendPaginated(
+		res,
+		"My applications retrieved successfully",
+		result.data,
+		result.meta,
+	);
 });
 
 const getApplicationsForLandlord = catchAsync(
 	async (req: Request, res: Response) => {
-		if (!req.user?.userId) {
-			throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-		}
+		const userId = requireUserId(req);
 
 		const filters = {
 			status: (req.query.status as ApplicationStatus) || undefined,
-			page: req.query.page ? parseInt(req.query.page as string) : 1,
-			limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-			sortBy: (req.query.sortBy as string) || "createdAt",
-			sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+			search: (req.query.search as string) || undefined,
+			...parseListParams(req.query),
 		};
 
 		const result = await ApplicationService.getApplicationsForLandlord(
-			req.user.userId,
+			userId,
 			filters,
 		);
 
-		sendResponse(res, {
-			success: true,
-			statusCode: httpStatus.OK,
-			message: "Applications for landlord retrieved successfully",
-			data: result.data,
-			meta: result.meta,
-		});
+		sendPaginated(
+			res,
+			"Applications for landlord retrieved successfully",
+			result.data,
+			result.meta,
+		);
 	},
 );
 
 const updateApplicationStatus = catchAsync(
 	async (req: Request, res: Response) => {
-		if (!req.user?.userId) {
-			throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-		}
+		const userId = requireUserId(req);
 
 		const { id } = req.params as { id: string };
 		const result = await ApplicationService.updateApplicationStatus(
 			id,
-			req.user.userId,
+			userId,
 			req.body,
 		);
 
-		sendResponse(res, {
-			success: true,
-			statusCode: httpStatus.OK,
-			message: "Application status updated successfully",
-			data: result,
-		});
+		sendOk(res, "Application status updated successfully", result);
 	},
 );
 
 const cancelApplication = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const { id } = req.params as { id: string };
-	await ApplicationService.cancelApplication(id, req.user.userId);
+	await ApplicationService.cancelApplication(id, userId);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Application cancelled successfully",
-		data: null,
-	});
+	sendOk(res, "Application cancelled successfully", null);
 });
 
 export const ApplicationController = {

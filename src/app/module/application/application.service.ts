@@ -18,18 +18,7 @@ import {
 	applyFilters,
 	buildSearchConditions,
 } from "../../utils/query";
-import {
-	assertOwnership,
-	assertNotDeleted,
-	assertActiveRoom,
-	getLandlordRooms,
-} from "../../utils/auth";
-import {
-	notifyApplicationSubmitted,
-	notifyApplicationAccepted,
-	notifyApplicationRejected,
-	notifyRoomBooked,
-} from "../../utils/notification";
+import { getLandlordRooms } from "../../utils/auth";
 
 const createApplication = async (
 	tenantId: string,
@@ -119,7 +108,10 @@ const getMyApplications = async (
 		sortOrder = "desc",
 	} = filters;
 
-	const baseConditions: Prisma.ApplicationWhereInput[] = [{ tenantId }];
+	const baseConditions: Prisma.ApplicationWhereInput[] = [
+		{ tenantId },
+		{ deletedAt: null },
+	];
 
 	const conditions = applyFilters(baseConditions, { status });
 
@@ -190,6 +182,7 @@ const getApplicationsForLandlord = async (
 
 	const baseConditions: Prisma.ApplicationWhereInput[] = [
 		{ roomId: { in: roomIds } },
+		{ deletedAt: null },
 	];
 
 	const conditions = applyFilters(baseConditions, { status });
@@ -249,8 +242,8 @@ const updateApplicationStatus = async (
 	landlordId: string,
 	payload: IUpdateApplicationStatusPayload,
 ): Promise<IApplicationResponse> => {
-	const application = await prisma.application.findUnique({
-		where: { id: applicationId },
+	const application = await prisma.application.findFirst({
+		where: { id: applicationId, deletedAt: null },
 		include: {
 			room: {
 				include: {
@@ -387,8 +380,8 @@ const cancelApplication = async (
 	applicationId: string,
 	tenantId: string,
 ): Promise<void> => {
-	const application = await prisma.application.findUnique({
-		where: { id: applicationId },
+	const application = await prisma.application.findFirst({
+		where: { id: applicationId, deletedAt: null },
 	});
 
 	if (!application) {

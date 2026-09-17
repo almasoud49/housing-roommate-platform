@@ -16,13 +16,13 @@ router.post(
 router.get(
 	"/my-applications",
 	auth("TENANT"),
-	validateRequest(ApplicationValidation.applicationFiltersSchema),
+	validateRequest(ApplicationValidation.applicationFiltersSchema, "query"),
 	ApplicationController.getMyApplications,
 );
 router.get(
 	"/landlord",
 	auth("LANDLORD"),
-	validateRequest(ApplicationValidation.applicationFiltersSchema),
+	validateRequest(ApplicationValidation.applicationFiltersSchema, "query"),
 	ApplicationController.getApplicationsForLandlord,
 );
 router.patch(

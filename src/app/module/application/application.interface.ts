@@ -1,4 +1,4 @@
-import type { ApplicationStatus, Role } from "../../../generated/prisma/client";
+import type { ApplicationStatus } from "../../../generated/prisma/client";
 
 export interface ICreateApplicationPayload {
 	roomId: string;
