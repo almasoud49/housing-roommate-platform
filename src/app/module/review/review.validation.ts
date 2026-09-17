@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationFields } from "../../validation/common";
 
 const createReviewSchema = z.object({
 	revieweeId: z.string().uuid("Invalid reviewee ID"),
@@ -12,10 +13,8 @@ const createReviewSchema = z.object({
 
 const reviewFiltersSchema = z.object({
 	revieweeId: z.string().uuid("Invalid reviewee ID").optional(),
-	page: z.coerce.number().int().positive().default(1),
-	limit: z.coerce.number().int().positive().max(50).default(10),
+	...paginationFields,
 	sortBy: z.enum(["createdAt", "rating"]).default("createdAt"),
-	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const ReviewValidation = {

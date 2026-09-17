@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { paginationFields } from "../../validation/common";
 import { Role, UserStatus } from "../../../generated/prisma/client";
 
 const updateUserRoleSchema = z.object({
-	role: z.enum([Role.TENANT, Role.LANDLORD, Role.ADMIN]),
+	role: z.enum([Role.TENANT, Role.LANDLORD, Role.PROPERTY_MANAGER, Role.ADMIN]),
 });
 
 const updateUserStatusSchema = z.object({
@@ -10,25 +11,23 @@ const updateUserStatusSchema = z.object({
 });
 
 const adminUserFiltersSchema = z.object({
-	role: z.enum([Role.TENANT, Role.LANDLORD, Role.ADMIN]).optional(),
+	role: z
+		.enum([Role.TENANT, Role.LANDLORD, Role.PROPERTY_MANAGER, Role.ADMIN])
+		.optional(),
 	status: z.enum([UserStatus.ACTIVE, UserStatus.BLOCKED]).optional(),
 	search: z.string().optional(),
-	page: z.coerce.number().int().positive().default(1),
-	limit: z.coerce.number().int().positive().max(50).default(10),
+	...paginationFields,
 	sortBy: z
 		.enum(["createdAt", "email", "name", "role", "status"])
 		.default("createdAt"),
-	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 
 const auditLogFiltersSchema = z.object({
 	action: z.string().optional(),
 	entityType: z.string().optional(),
 	userId: z.string().uuid().optional(),
-	page: z.coerce.number().int().positive().default(1),
-	limit: z.coerce.number().int().positive().max(50).default(10),
+	...paginationFields,
 	sortBy: z.enum(["createdAt"]).default("createdAt"),
-	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const AdminValidation = {

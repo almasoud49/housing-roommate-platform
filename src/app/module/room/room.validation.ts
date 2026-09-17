@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationFields } from "../../validation/common";
 
 const createRoomSchema = z.object({
 	flatId: z.string().uuid("Invalid flat ID"),
@@ -31,10 +32,8 @@ const roomFiltersSchema = z.object({
 	availableTo: z.string().datetime().optional(),
 	minPrice: z.coerce.number().positive().optional(),
 	maxPrice: z.coerce.number().positive().optional(),
-	page: z.coerce.number().int().positive().default(1),
-	limit: z.coerce.number().int().positive().max(50).default(10),
+	...paginationFields,
 	sortBy: z.enum(["createdAt", "price", "name"]).default("createdAt"),
-	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const RoomValidation = {

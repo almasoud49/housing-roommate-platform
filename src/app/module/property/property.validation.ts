@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationFields } from "../../validation/common";
 
 const createPropertySchema = z.object({
 	title: z
@@ -30,10 +31,8 @@ const updatePropertySchema = z.object({
 const propertyFiltersSchema = z.object({
 	city: z.string().optional(),
 	search: z.string().optional(),
-	page: z.coerce.number().int().positive().default(1),
-	limit: z.coerce.number().int().positive().max(50).default(10),
+	...paginationFields,
 	sortBy: z.enum(["createdAt", "title", "city"]).default("createdAt"),
-	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const PropertyValidation = {

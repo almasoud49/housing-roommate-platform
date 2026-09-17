@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationFields } from "../../validation/common";
 
 const uploadDocsSchema = z.object({
 	documents: z
@@ -17,10 +18,8 @@ const filtersSchema = z.object({
 	status: z.enum(["ACTIVE", "BLOCKED"]).optional(),
 	isVerified: z.coerce.boolean().optional(),
 	search: z.string().optional(),
-	page: z.coerce.number().int().positive().default(1),
-	limit: z.coerce.number().int().positive().max(50).default(10),
+	...paginationFields,
 	sortBy: z.enum(["createdAt", "name", "email"]).default("createdAt"),
-	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const VerificationValidation = {

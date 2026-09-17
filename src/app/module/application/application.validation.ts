@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationFields } from "../../validation/common";
 import { ApplicationStatus } from "../../../generated/prisma/client";
 
 const createApplicationSchema = z.object({
@@ -22,10 +23,9 @@ const applicationFiltersSchema = z.object({
 			ApplicationStatus.REJECTED,
 		])
 		.optional(),
-	page: z.coerce.number().int().positive().default(1),
-	limit: z.coerce.number().int().positive().max(50).default(10),
+	search: z.string().optional(),
+	...paginationFields,
 	sortBy: z.enum(["createdAt", "status"]).default("createdAt"),
-	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const ApplicationValidation = {
