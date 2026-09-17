@@ -15,17 +15,16 @@ router.post(
 );
 router.get(
 	"/",
-	auth(),
-	validateRequest(PropertyValidation.propertyFiltersSchema),
+	validateRequest(PropertyValidation.propertyFiltersSchema, "query"),
 	PropertyController.getProperties,
 );
 router.get(
 	"/my-properties",
 	auth("LANDLORD"),
-	validateRequest(PropertyValidation.propertyFiltersSchema),
+	validateRequest(PropertyValidation.propertyFiltersSchema, "query"),
 	PropertyController.getMyProperties,
 );
-router.get("/:id", auth(), PropertyController.getPropertyById);
+router.get("/:id", PropertyController.getPropertyById);
 router.patch(
 	"/:id",
 	auth("LANDLORD"),

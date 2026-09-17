@@ -1,5 +1,3 @@
-import type { Role } from "../../../generated/prisma/client";
-
 export interface ICreatePropertyPayload {
 	title: string;
 	description: string;

@@ -1,75 +1,52 @@
 import type { Request, Response } from "express";
-import httpStatus from "http-status";
 import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import { requireUserId } from "../../utils/request";
+import { parseListParams } from "../../utils/query";
+import { sendCreated, sendOk, sendPaginated } from "../../utils/sendResponse";
 import { PropertyService } from "./property.service";
-import { AppError } from "../../utils/AppError";
 
 const createProperty = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
-	const result = await PropertyService.createProperty(
-		req.user.userId,
-		req.body,
-	);
+	const result = await PropertyService.createProperty(userId, req.body);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.CREATED,
-		message: "Property created successfully",
-		data: result,
-	});
+	sendCreated(res, "Property created successfully", result);
 });
 
 const getProperties = catchAsync(async (req: Request, res: Response) => {
 	const filters = {
 		city: (req.query.city as string) || undefined,
 		search: (req.query.search as string) || undefined,
-		page: req.query.page ? parseInt(req.query.page as string) : 1,
-		limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-		sortBy: (req.query.sortBy as string) || "createdAt",
-		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+		...parseListParams(req.query),
 	};
 
 	const result = await PropertyService.getProperties(filters);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Properties retrieved successfully",
-		data: result.data,
-		meta: result.meta,
-	});
+	sendPaginated(
+		res,
+		"Properties retrieved successfully",
+		result.data,
+		result.meta,
+	);
 });
 
 const getMyProperties = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const filters = {
 		city: (req.query.city as string) || undefined,
 		search: (req.query.search as string) || undefined,
-		page: req.query.page ? parseInt(req.query.page as string) : 1,
-		limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-		sortBy: (req.query.sortBy as string) || "createdAt",
-		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+		...parseListParams(req.query),
 	};
 
-	const result = await PropertyService.getMyProperties(
-		req.user.userId,
-		filters,
-	);
+	const result = await PropertyService.getMyProperties(userId, filters);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "My properties retrieved successfully",
-		data: result.data,
-		meta: result.meta,
-	});
+	sendPaginated(
+		res,
+		"My properties retrieved successfully",
+		result.data,
+		result.meta,
+	);
 });
 
 const getPropertyById = catchAsync(async (req: Request, res: Response) => {
@@ -77,48 +54,25 @@ const getPropertyById = catchAsync(async (req: Request, res: Response) => {
 
 	const result = await PropertyService.getPropertyById(id);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Property retrieved successfully",
-		data: result,
-	});
+	sendOk(res, "Property retrieved successfully", result);
 });
 
 const updateProperty = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const { id } = req.params as { id: string };
-	const result = await PropertyService.updateProperty(
-		id,
-		req.user.userId,
-		req.body,
-	);
+	const result = await PropertyService.updateProperty(id, userId, req.body);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Property updated successfully",
-		data: result,
-	});
+	sendOk(res, "Property updated successfully", result);
 });
 
 const deleteProperty = catchAsync(async (req: Request, res: Response) => {
-	if (!req.user?.userId) {
-		throw new AppError(httpStatus.UNAUTHORIZED, "User not authenticated");
-	}
+	const userId = requireUserId(req);
 
 	const { id } = req.params as { id: string };
-	await PropertyService.deleteProperty(id, req.user.userId);
+	await PropertyService.deleteProperty(id, userId);
 
-	sendResponse(res, {
-		success: true,
-		statusCode: httpStatus.OK,
-		message: "Property deleted successfully",
-		data: null,
-	});
+	sendOk(res, "Property deleted successfully", null);
 });
 
 export const PropertyController = {
