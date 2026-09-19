@@ -16,7 +16,11 @@ const createFlat = catchAsync(async (req: Request, res: Response) => {
 const getFlats = catchAsync(async (req: Request, res: Response) => {
 	const filters = {
 		buildingId: (req.query.buildingId as string) || undefined,
-		...parseListParams(req.query),
+		page: req.query.page ? Number(req.query.page) : 1,
+		limit: req.query.limit ? Number(req.query.limit) : 10,
+		sortBy:
+			(req.query.sortBy as "createdAt" | "flatNumber" | "floor") || "createdAt",
+		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
 	};
 
 	const result = await FlatService.getFlats(filters);
@@ -28,7 +32,11 @@ const getFlatsByBuilding = catchAsync(async (req: Request, res: Response) => {
 	const { buildingId } = req.params as { buildingId: string };
 
 	const filters = {
-		...parseListParams(req.query),
+		page: req.query.page ? Number(req.query.page) : 1,
+		limit: req.query.limit ? Number(req.query.limit) : 10,
+		sortBy:
+			(req.query.sortBy as "createdAt" | "flatNumber" | "floor") || "createdAt",
+		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
 	};
 
 	const result = await FlatService.getFlatsByBuilding(buildingId, filters);

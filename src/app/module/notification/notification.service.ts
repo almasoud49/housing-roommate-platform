@@ -103,10 +103,30 @@ const deleteNotification = async (
 	await prisma.notification.delete({ where: { id } });
 };
 
+const getUpdatesSince = async (
+	userId: string,
+	since: Date | null,
+): Promise<{ notifications: INotificationResponse[]; unreadCount: number }> => {
+	const [notifications, unreadCount] = await Promise.all([
+		prisma.notification.findMany({
+			where: since ? { userId, createdAt: { gt: since } } : { userId },
+			orderBy: { createdAt: "asc" },
+			take: 20,
+		}),
+		prisma.notification.count({ where: { userId, isRead: false } }),
+	]);
+
+	return {
+		notifications: notifications as unknown as INotificationResponse[],
+		unreadCount,
+	};
+};
+
 export const NotificationService = {
 	getMyNotifications,
 	getUnreadCount,
 	markAsRead,
 	markAllAsRead,
 	deleteNotification,
+	getUpdatesSince,
 };

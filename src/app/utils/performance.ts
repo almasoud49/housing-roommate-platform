@@ -1,6 +1,3 @@
-import { prisma } from "../lib/prisma";
-import { redisManager } from "../lib/redis";
-
 interface QueryMetrics {
 	query: string;
 	duration: number;

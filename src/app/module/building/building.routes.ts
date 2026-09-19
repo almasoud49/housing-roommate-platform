@@ -9,7 +9,7 @@ const router = Router();
 
 router.post(
 	"/",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	validateRequest(BuildingValidation.createBuildingSchema),
 	BuildingController.createBuilding,
 );
@@ -28,14 +28,14 @@ router.get(
 router.get("/:id", auth(), BuildingController.getBuildingById);
 router.patch(
 	"/:id",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	checkPermission("update", "building"),
 	validateRequest(BuildingValidation.updateBuildingSchema),
 	BuildingController.updateBuilding,
 );
 router.delete(
 	"/:id",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	checkPermission("delete", "building"),
 	BuildingController.deleteBuilding,
 );

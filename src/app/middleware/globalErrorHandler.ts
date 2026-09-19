@@ -3,6 +3,7 @@ import httpStatus from "http-status";
 import config from "../config";
 import { AppError, type AppErrorDetails } from "../utils/AppError";
 import { Prisma } from "../../generated/prisma/client";
+import { sendResponse } from "../utils/sendResponse";
 
 export const globalErrorHandler = async (
 	err: any,
@@ -12,7 +13,6 @@ export const globalErrorHandler = async (
 ) => {
 	let statusCode: number = httpStatus.INTERNAL_SERVER_ERROR;
 	let errorMessage = err.message || "Internal Server Error";
-	const errorName = err.name || "Internal Server Error";
 	let errorCode = "INTERNAL_SERVER_ERROR";
 	let details: AppErrorDetails[] = [];
 
@@ -67,14 +67,11 @@ export const globalErrorHandler = async (
 		errorMessage = err.message;
 	}
 
-	const isDev = config.node_env === "development";
-
-	res.status(statusCode).json({
+	sendResponse(res, {
 		success: false,
 		statusCode,
-		errorCode,
-		message: isDev ? errorMessage : "Internal Server Error",
-		details: details.length > 0 ? details : undefined,
-		...(isDev && { stack: err.stack, error: err }),
+		message: errorMessage,
+		data: null,
+		errors: details,
 	});
 };

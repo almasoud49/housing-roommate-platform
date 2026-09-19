@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import httpStatus from "http-status";
+import type { AppErrorDetails } from "./AppError";
 
 type TMeta = {
 	page: number;
@@ -14,6 +15,7 @@ type TResponseData<T> = {
 	message: string;
 	data: T;
 	meta?: TMeta;
+	errors?: AppErrorDetails[];
 };
 
 export const sendResponse = <T>(res: Response, data: TResponseData<T>) => {

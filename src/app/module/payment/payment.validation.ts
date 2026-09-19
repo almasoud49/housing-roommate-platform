@@ -14,9 +14,9 @@ const bkashCallbackSchema = z.object({
 const refundPaymentSchema = z.object({
 	paymentId: z.string().min(1, "Payment ID is required"),
 	amount: z.number().positive("Amount must be positive"),
-	currency: z.string().length(3, "Currency must be 3 letters"),
-	invoiceNumber: z.string().min(1, "Invoice number is required"),
-	reason: z.string().min(1, "Reason is required"),
+	trxID: z.string().min(1).optional(),
+	sku: z.string().min(1).max(255).optional(),
+	reason: z.string().min(1, "Reason is required").max(255),
 });
 
 export const PaymentValidation = {

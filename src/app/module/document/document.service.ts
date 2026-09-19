@@ -19,6 +19,25 @@ const applicationSelect = {
 	roomId: true,
 };
 
+const STAFF_ROLES = ["LANDLORD", "PROPERTY_MANAGER", "ADMIN"];
+
+const getDocumentByUser = async (
+	id: string,
+	userId: string,
+	userRole?: string,
+): Promise<Prisma.RentalDocumentGetPayload<{
+	include: { application: { select: typeof applicationSelect } };
+}> | null> => {
+	const doc = await prisma.rentalDocument.findFirst({
+		where: { id },
+		include: { application: { select: applicationSelect } },
+	});
+	if (!doc) return null;
+	if (doc.application.tenantId === userId) return doc;
+	if (userRole && STAFF_ROLES.includes(userRole)) return doc;
+	return null;
+};
+
 const createDocument = async (
 	payload: ICreateDocumentPayload,
 ): Promise<IDocumentResponse> => {
@@ -98,11 +117,11 @@ const getDocumentById = async (id: string): Promise<IDocumentResponse> => {
 
 const updateDocument = async (
 	id: string,
+	userId: string,
+	userRole: string,
 	payload: IUpdateDocumentPayload,
 ): Promise<IDocumentResponse> => {
-	const document = await prisma.rentalDocument.findUnique({
-		where: { id },
-	});
+	const document = await getDocumentByUser(id, userId, userRole);
 
 	if (!document) {
 		throw new AppError(httpStatus.NOT_FOUND, "Document not found");
@@ -183,10 +202,12 @@ const updateDocumentStatus = async (
 	return updated as unknown as IDocumentResponse;
 };
 
-const deleteDocument = async (id: string): Promise<void> => {
-	const document = await prisma.rentalDocument.findUnique({
-		where: { id },
-	});
+const deleteDocument = async (
+	id: string,
+	userId: string,
+	userRole: string,
+): Promise<void> => {
+	const document = await getDocumentByUser(id, userId, userRole);
 
 	if (!document) {
 		throw new AppError(httpStatus.NOT_FOUND, "Document not found");

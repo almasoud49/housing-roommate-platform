@@ -10,22 +10,40 @@ const router = Router();
 // All routes require authentication
 router.use(auth(Role.TENANT, Role.LANDLORD, Role.PROPERTY_MANAGER, Role.ADMIN));
 
-// Roommate preferences
+// Roommate preferences — tenant feature
 router.post(
 	"/preferences",
+	auth(Role.TENANT),
 	validateRequest(RoommateValidation.roommatePreferenceSchema),
 	RoommateController.createOrUpdatePrefs,
 );
-router.get("/preferences", RoommateController.getMyPreferences);
+router.get(
+	"/preferences",
+	auth(Role.TENANT),
+	RoommateController.getMyPreferences,
+);
 
-// Matching
+// Matching — tenant feature (admin read-only)
 router.post(
 	"/matches",
+	auth(Role.TENANT),
 	validateRequest(RoommateValidation.matchRequestSchema),
 	RoommateController.findMatches,
 );
-router.get("/matches", RoommateController.getMyMatches);
-router.post("/matches/:matchedWithId", RoommateController.createMatch);
-router.patch("/matches/:matchId/status", RoommateController.updateMatchStatus);
+router.get(
+	"/matches",
+	auth(Role.TENANT, Role.ADMIN),
+	RoommateController.getMyMatches,
+);
+router.post(
+	"/matches/:matchedWithId",
+	auth(Role.TENANT),
+	RoommateController.createMatch,
+);
+router.patch(
+	"/matches/:matchId/status",
+	auth(Role.TENANT),
+	RoommateController.updateMatchStatus,
+);
 
 export const RoommateRoutes = router;

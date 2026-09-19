@@ -21,13 +21,13 @@ router.get(
 );
 router.get(
 	"/landlord",
-	auth("LANDLORD"),
+	auth("LANDLORD", "PROPERTY_MANAGER", "ADMIN"),
 	validateRequest(ApplicationValidation.applicationFiltersSchema, "query"),
 	ApplicationController.getApplicationsForLandlord,
 );
 router.patch(
 	"/:id/status",
-	auth("LANDLORD"),
+	auth("LANDLORD", "PROPERTY_MANAGER", "ADMIN"),
 	checkPermission("approve", "application"),
 	validateRequest(ApplicationValidation.updateApplicationStatusSchema),
 	ApplicationController.updateApplicationStatus,

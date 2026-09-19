@@ -16,7 +16,11 @@ const createBuilding = catchAsync(async (req: Request, res: Response) => {
 const getBuildings = catchAsync(async (req: Request, res: Response) => {
 	const filters = {
 		propertyId: (req.query.propertyId as string) || undefined,
-		...parseListParams(req.query),
+		page: req.query.page ? Number(req.query.page) : 1,
+		limit: req.query.limit ? Number(req.query.limit) : 10,
+		sortBy:
+			(req.query.sortBy as "createdAt" | "name" | "floors") || "createdAt",
+		sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
 	};
 
 	const result = await BuildingService.getBuildings(filters);
@@ -34,7 +38,11 @@ const getBuildingsByProperty = catchAsync(
 		const { propertyId } = req.params as { propertyId: string };
 
 		const filters = {
-			...parseListParams(req.query),
+			page: req.query.page ? Number(req.query.page) : 1,
+			limit: req.query.limit ? Number(req.query.limit) : 10,
+			sortBy:
+				(req.query.sortBy as "createdAt" | "name" | "floors") || "createdAt",
+			sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
 		};
 
 		const result = await BuildingService.getBuildingsByProperty(

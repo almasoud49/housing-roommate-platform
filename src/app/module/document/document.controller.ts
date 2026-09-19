@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { catchAsync } from "../../utils/catchAsync";
+import { requireUser } from "../../utils/request";
 import { parseListParams } from "../../utils/query";
 import { sendCreated, sendOk, sendPaginated } from "../../utils/sendResponse";
 import type { IDocumentFilters } from "./document.interface";
@@ -39,8 +40,14 @@ const getDocumentById = catchAsync(async (req: Request, res: Response) => {
 
 const updateDocument = catchAsync(async (req: Request, res: Response) => {
 	const { id } = req.params as { id: string };
+	const user = requireUser(req);
 
-	const result = await DocumentService.updateDocument(id, req.body);
+	const result = await DocumentService.updateDocument(
+		id,
+		user.userId,
+		user.role,
+		req.body,
+	);
 
 	sendOk(res, "Document updated successfully", result);
 });
@@ -55,8 +62,9 @@ const updateDocumentStatus = catchAsync(async (req: Request, res: Response) => {
 
 const deleteDocument = catchAsync(async (req: Request, res: Response) => {
 	const { id } = req.params as { id: string };
+	const user = requireUser(req);
 
-	await DocumentService.deleteDocument(id);
+	await DocumentService.deleteDocument(id, user.userId, user.role);
 
 	sendOk(res, "Document deleted successfully", null);
 });

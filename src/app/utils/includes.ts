@@ -86,20 +86,6 @@ export const roomWithFlatBuildingPropertyInclude: Prisma.RoomInclude = {
 	},
 };
 
-export const roomWithPropertyLandlordInclude: Prisma.RoomInclude = {
-	flat: {
-		include: {
-			building: {
-				include: {
-					property: {
-						select: { id: true, title: true, landlordId: true },
-					},
-				},
-			},
-		},
-	},
-};
-
 export const applicationWithTenantAndRoomInclude: Prisma.ApplicationInclude = {
 	tenant: {
 		select: {
@@ -130,99 +116,6 @@ export const applicationWithTenantAndRoomInclude: Prisma.ApplicationInclude = {
 									landlordId: true,
 								},
 							},
-						},
-					},
-				},
-			},
-		},
-	},
-};
-
-export const userWithProfileInclude: Prisma.UserInclude = {
-	profile: {
-		select: {
-			phoneNumber: true,
-			bio: true,
-			avatarUrl: true,
-			preferences: true,
-			roommatePrefs: true,
-		},
-	},
-};
-
-export const userWithProfileAndRoommatePrefsInclude: Prisma.UserInclude = {
-	profile: {
-		select: {
-			phoneNumber: true,
-			bio: true,
-			avatarUrl: true,
-			preferences: true,
-			roommatePrefs: true,
-		},
-	},
-};
-
-export const paymentWithApplicationInclude: Prisma.PaymentInclude = {
-	application: {
-		include: {
-			room: {
-				include: {
-					flat: {
-						include: {
-							building: {
-								include: {
-									property: true,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	},
-};
-
-export const maintenanceRequestWithRoomInclude: Prisma.MaintenanceRequestInclude =
-	{
-		room: {
-			include: {
-				flat: {
-					include: {
-						building: {
-							include: {
-								property: true,
-							},
-						},
-					},
-				},
-			},
-		},
-	};
-
-export const rentWithRoomInclude: Prisma.RentInclude = {
-	room: {
-		include: {
-			flat: {
-				include: {
-					building: {
-						include: {
-							property: true,
-						},
-					},
-				},
-			},
-		},
-	},
-};
-
-export const utilityBillWithRoomInclude: Prisma.UtilityBillInclude = {
-	room: {
-		include: {
-			flat: {
-				include: {
-					building: {
-						include: {
-							property: true,
 						},
 					},
 				},

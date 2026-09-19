@@ -31,7 +31,7 @@ const findMatches = catchAsync(async (req: Request, res: Response) => {
 
 const createMatch = catchAsync(async (req: Request, res: Response) => {
 	const userId = requireUserId(req);
-	const matchedWithId = req.params.matchedWithId;
+	const matchedWithId = req.params.matchedWithId as string;
 	const { roomId } = req.body;
 
 	if (!matchedWithId) {

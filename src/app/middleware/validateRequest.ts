@@ -1,18 +1,21 @@
 import type { NextFunction, Request, Response } from "express";
 import httpStatus from "http-status";
-import type { ZodSchema, ZodTypeAny } from "zod";
+import type { ZodSchema } from "zod";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
 
-export const validateRequest = (zodSchema: ZodSchema) => {
+export const validateRequest = (
+	zodSchema: ZodSchema,
+	target: "body" | "query" | "params" = "body",
+) => {
 	return catchAsync((req: Request, res: Response, next: NextFunction) => {
-		const payload = {
-			body: req.body ?? {},
-			query: req.query ?? {},
-			params: req.params ?? {},
-		};
-
-		const result = zodSchema.safeParse(payload);
+		const source =
+			target === "body"
+				? req.body
+				: target === "query"
+					? req.query
+					: req.params;
+		const result = zodSchema.safeParse(source);
 
 		if (!result.success) {
 			const details = result.error.issues.map((issue) => ({
@@ -29,16 +32,7 @@ export const validateRequest = (zodSchema: ZodSchema) => {
 			);
 		}
 
-		const data = result.data as {
-			body?: unknown;
-			query?: unknown;
-			params?: unknown;
-		};
-
-		if (data.body) req.body = data.body;
-		if (data.query) req.query = data.query as Record<string, string>;
-		if (data.params) req.params = data.params as Record<string, string>;
-
+		if (target === "body") req.body = result.data;
 		next();
 	});
 };

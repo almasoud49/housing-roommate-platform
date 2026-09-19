@@ -12,3 +12,6 @@ yarn.lock
 pnpm-workspace.yaml
 .vscode
 .vercel
+# Local upload test assets (may contain PII like NID.pdf - never commit)
+/assets/
+NID.pdf

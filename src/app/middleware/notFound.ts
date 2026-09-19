@@ -1,8 +1,8 @@
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import httpStatus from "http-status";
 import { AppError } from "../utils/AppError";
 
-export const notFound = (req: Request, res: Response, next: Function) => {
+export const notFound = (req: Request, res: Response, next: NextFunction) => {
 	const error = new AppError(
 		httpStatus.NOT_FOUND,
 		`Route ${req.originalUrl} not found`,

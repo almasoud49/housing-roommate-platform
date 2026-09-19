@@ -9,7 +9,7 @@ const router = Router();
 
 router.post(
 	"/",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	validateRequest(RoomValidation.createRoomSchema),
 	RoomController.createRoom,
 );
@@ -28,14 +28,14 @@ router.get(
 router.get("/:id", auth(), RoomController.getRoomById);
 router.patch(
 	"/:id",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	checkPermission("update", "room"),
 	validateRequest(RoomValidation.updateRoomSchema),
 	RoomController.updateRoom,
 );
 router.delete(
 	"/:id",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	checkPermission("delete", "room"),
 	RoomController.deleteRoom,
 );

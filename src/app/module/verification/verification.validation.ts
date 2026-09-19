@@ -9,7 +9,7 @@ const uploadDocsSchema = z.object({
 });
 
 const reviewSchema = z.object({
-	userId: z.string().uuid("Invalid user ID"),
+	userId: z.uuid("Invalid user ID"),
 	action: z.enum(["APPROVE", "REJECT"]),
 	notes: z.string().optional(),
 });

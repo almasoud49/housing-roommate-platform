@@ -13,7 +13,7 @@ import type {
 } from "./payment.interface";
 import type { Prisma } from "../../../generated/prisma/client";
 import { redisManager } from "../../lib/redis";
-import { getBkashIdToken } from "../../lib/bkash";
+import { getBkashIdToken, clearBkashTokens } from "../../lib/bkash";
 import { PaymentStatus, RentStatus } from "../../../generated/prisma/client";
 
 interface BkashCreatePaymentResponse {
@@ -52,11 +52,17 @@ interface BkashQueryPaymentResponse {
 }
 
 interface BkashRefundResponse {
-	refundTransactionId: string;
-	refundStatus: string;
-	amount: string;
-	currency: string;
-	executedTime: string;
+	completedTime?: string;
+	transactionStatus?: string;
+	// Legacy / alternate field names returned by some versions
+	refundStatus?: string;
+	originalTrxID?: string;
+	refundTrxID?: string;
+	amount?: string;
+	currency?: string;
+	charge?: string;
+	statusCode?: string;
+	statusMessage?: string;
 }
 
 const getBkashAuthHeaders = async (): Promise<Record<string, string>> => ({
@@ -66,28 +72,55 @@ const getBkashAuthHeaders = async (): Promise<Record<string, string>> => ({
 
 // Single POST helper for all bKash checkout APIs: same headers, JSON body,
 // and error shape — only endpoint, body, and error prefix vary.
+// Retries once with a fresh token when bKash rejects the cached id_token
+// (stale cache surfaces as AWS-gateway SigV4 text or errorCode 2079).
+const isBkashAuthFailure = (body: string): boolean => {
+	const haystack = body.toLowerCase();
+	return (
+		haystack.includes("authorization header requires") ||
+		haystack.includes("invalid app token") ||
+		haystack.includes("invalid token") ||
+		haystack.includes('"errorcode":"2079"') ||
+		haystack.includes('"errorcode":2079') ||
+		haystack.includes('"statuscode":"2001"')
+	);
+};
+
 const bkashPost = async <T>(
 	endpoint: string,
 	body: Record<string, unknown>,
 	errorPrefix: string,
+	retryOnAuthFailure = true,
 ): Promise<T> => {
-	const headers = await getBkashAuthHeaders();
+	const sendOnce = async () => {
+		const headers = await getBkashAuthHeaders();
+		return fetch(`${config.bkash_base_url}${endpoint}`, {
+			method: "POST",
+			headers: {
+				...headers,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(body),
+		});
+	};
 
-	const response = await fetch(`${config.bkash_base_url}${endpoint}`, {
-		method: "POST",
-		headers: {
-			...headers,
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify(body),
-	});
+	let response = await sendOnce();
+
+	if (!response.ok && retryOnAuthFailure) {
+		const peek = await response.clone().text();
+		if (
+			response.status === 401 ||
+			response.status === 403 ||
+			isBkashAuthFailure(peek)
+		) {
+			await clearBkashTokens();
+			response = await sendOnce();
+		}
+	}
 
 	if (!response.ok) {
 		const error = await response.text();
-		throw new AppError(
-			httpStatus.INTERNAL_SERVER_ERROR,
-			`${errorPrefix}: ${error}`,
-		);
+		throw new AppError(httpStatus.BAD_GATEWAY, `${errorPrefix}: ${error}`);
 	}
 
 	return (await response.json()) as T;
@@ -132,15 +165,15 @@ const queryBkashPayment = async (
 };
 
 const refundBkashPayment = async (
-	payload: IBkashRefundPayload,
+	payload: IBkashRefundPayload & { trxID: string; sku: string },
 ): Promise<BkashRefundResponse> => {
 	return bkashPost<BkashRefundResponse>(
-		"/tokenized/checkout/refund",
+		"/tokenized/checkout/payment/refund",
 		{
 			paymentID: payload.paymentId,
 			amount: payload.amount.toString(),
-			currency: payload.currency,
-			invoiceNumber: payload.invoiceNumber,
+			trxID: payload.trxID,
+			sku: payload.sku,
 			reason: payload.reason,
 		},
 		"bKash refund error",
@@ -184,20 +217,24 @@ const mapPaymentToResponse = (
 	};
 };
 
+const IDEMPOTENCY_TTL_SECONDS = 10 * 60; // 10 minutes — window to retry payment creation
+
 const initiatePayment = async (
 	tenantId: string,
 	payload: IInitiatePaymentPayload,
 	idempotencyKey?: string,
 ): Promise<IBkashPaymentResponse> => {
 	if (idempotencyKey) {
-		const existing = await redisManager.get(
+		const existingId = await redisManager.get(
 			`payment:idempotency:${idempotencyKey}`,
 		);
-		if (existing) {
-			const payment = await prisma.payment.findUnique({
-				where: { id: existing },
+		if (existingId) {
+			const payment = await prisma.payment.findFirst({
+				where: { id: existingId, deletedAt: null },
 			});
 			if (payment) return mapPaymentToResponse(payment);
+			// Stale idempotency key — clear it and proceed
+			await redisManager.del(idempotencyKey);
 		}
 	}
 
@@ -271,9 +308,7 @@ const initiatePayment = async (
 		await redisManager.set(
 			`payment:idempotency:${idempotencyKey}`,
 			payment.id,
-			{
-				EX: 60 * 60 * 24,
-			},
+			{ EX: IDEMPOTENCY_TTL_SECONDS },
 		);
 	}
 
@@ -341,7 +376,7 @@ const handleBkashCallback = async (
 						dueDate.setMonth(dueDate.getMonth() + 1);
 						dueDate.setDate(1);
 
-						await tx.rent.create({
+						const rent = await tx.rent.create({
 							data: {
 								applicationId: payment.applicationId,
 								tenantId: payment.tenantId,
@@ -413,13 +448,25 @@ const getPaymentStatus = async (
 
 const getPaymentById = async (
 	paymentId: string,
+	userId: string,
+	userRole: string,
 ): Promise<IBkashPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
 		where: { id: paymentId, deletedAt: null },
+		include: { application: { select: { roomId: true } } },
 	});
 
 	if (!payment) {
 		throw new AppError(httpStatus.NOT_FOUND, "Payment not found");
+	}
+
+	const isOwner = payment.tenantId === userId;
+	const isStaff = ["LANDLORD", "PROPERTY_MANAGER", "ADMIN"].includes(userRole);
+	if (!isOwner && !isStaff) {
+		throw new AppError(
+			httpStatus.FORBIDDEN,
+			"You can only view your own payments",
+		);
 	}
 
 	return mapPaymentToResponse(payment);
@@ -427,6 +474,8 @@ const getPaymentById = async (
 
 const queryPaymentStatus = async (
 	bkashPaymentId: string,
+	userId: string,
+	userRole: string,
 ): Promise<IBkashPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
 		where: { bkashPaymentId, deletedAt: null },
@@ -434,6 +483,15 @@ const queryPaymentStatus = async (
 
 	if (!payment) {
 		throw new AppError(httpStatus.NOT_FOUND, "Payment not found");
+	}
+
+	const isOwner = payment.tenantId === userId;
+	const isStaff = ["LANDLORD", "PROPERTY_MANAGER", "ADMIN"].includes(userRole);
+	if (!isOwner && !isStaff) {
+		throw new AppError(
+			httpStatus.FORBIDDEN,
+			"You can only view your own payments",
+		);
 	}
 
 	const queryResponse = await queryBkashPayment({ paymentId: bkashPaymentId });
@@ -474,15 +532,31 @@ const refundPayment = async (
 		);
 	}
 
+	// trxID comes from the execute step and is mandatory for bKash refund.
+	// Accept it from the request, otherwise fall back to the stored execute response.
+	const executeData = payment.bkashExecuteResponse as unknown as {
+		trxID?: string;
+	} | null;
+	const trxID = payload.trxID ?? executeData?.trxID;
+	if (!trxID) {
+		throw new AppError(
+			httpStatus.BAD_REQUEST,
+			"trxID is required for refund (not found on payment execute record)",
+		);
+	}
+	const sku = payload.sku ?? payment.applicationId;
+
 	const refundResponse = await refundBkashPayment({
 		paymentId: payload.paymentId,
 		amount: payload.amount,
-		currency: payload.currency,
-		invoiceNumber: payload.invoiceNumber,
+		trxID,
+		sku,
 		reason: payload.reason,
 	});
 
-	if (refundResponse.refundStatus === "Completed") {
+	const refundStatus =
+		refundResponse.transactionStatus ?? refundResponse.refundStatus;
+	if (refundStatus === "Completed") {
 		const updatedPayment = await prisma.payment.update({
 			where: { id: payment.id },
 			data: { status: PaymentStatus.REFUNDED },

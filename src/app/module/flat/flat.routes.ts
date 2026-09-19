@@ -9,7 +9,7 @@ const router = Router();
 
 router.post(
 	"/",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	validateRequest(FlatValidation.createFlatSchema),
 	FlatController.createFlat,
 );
@@ -28,14 +28,14 @@ router.get(
 router.get("/:id", auth(), FlatController.getFlatById);
 router.patch(
 	"/:id",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	checkPermission("update", "flat"),
 	validateRequest(FlatValidation.updateFlatSchema),
 	FlatController.updateFlat,
 );
 router.delete(
 	"/:id",
-	auth("LANDLORD"),
+	auth("LANDLORD", "ADMIN"),
 	checkPermission("delete", "flat"),
 	FlatController.deleteFlat,
 );

@@ -34,13 +34,36 @@ const requestBkashToken = async (
 	});
 
 	if (!response.ok) {
+		const errorBody = await response.text();
 		throw new AppError(
 			httpStatus.BAD_GATEWAY,
-			"Bkash Access Token Grant Failed",
+			`Bkash token request failed: ${errorBody}`,
 		);
 	}
 
-	return (await response.json()) as BkashTokenResponse;
+	const data = (await response.json()) as BkashTokenResponse;
+	if (!data.id_token) {
+		throw new AppError(
+			httpStatus.BAD_GATEWAY,
+			"Bkash token response missing id_token",
+		);
+	}
+	return data;
+};
+
+export const clearBkashTokens = async (): Promise<void> => {
+	await Promise.all([
+		redisManager.del(ID_TOKEN_KEY),
+		redisManager.del(REFRESH_TOKEN_KEY),
+	]);
+};
+
+const isPlausibleIdToken = (token: string): boolean => {
+	// Real bKash id_tokens are long JWT-like strings. A short base64 stub
+	// (e.g. the 44-char value seen in gateway SigV4 errors) means a stale /
+	// corrupt cache entry — never send it, force a fresh grant.
+	if (!token || token.length < 100) return false;
+	return true;
 };
 
 export const getBkashIdToken = async (): Promise<string> => {
@@ -69,11 +92,20 @@ export const getBkashIdToken = async (): Promise<string> => {
 			await redisManager.set(ID_TOKEN_KEY, refreshed.id_token, {
 				EX: ID_TOKEN_TTL_SECONDS,
 			});
+			if (refreshed.refresh_token) {
+				await redisManager.set(REFRESH_TOKEN_KEY, refreshed.refresh_token, {
+					EX: REFRESH_TOKEN_TTL_SECONDS,
+				});
+			}
 			return refreshed.id_token;
 		}
 
-		if (cachedTTL > REFRESH_THRESHOLD_SECONDS) {
-			return cachedToken as string;
+		if (cachedToken && cachedTTL > REFRESH_THRESHOLD_SECONDS) {
+			if (isPlausibleIdToken(cachedToken)) {
+				return cachedToken;
+			}
+			// Corrupt/stale cache entry — drop it and fall through to grant.
+			await clearBkashTokens();
 		}
 
 		const granted = await requestBkashToken("/tokenized/checkout/token/grant", {
@@ -83,9 +115,11 @@ export const getBkashIdToken = async (): Promise<string> => {
 		await redisManager.set(ID_TOKEN_KEY, granted.id_token, {
 			EX: ID_TOKEN_TTL_SECONDS,
 		});
-		await redisManager.set(REFRESH_TOKEN_KEY, granted.refresh_token ?? "", {
-			EX: REFRESH_TOKEN_TTL_SECONDS,
-		});
+		if (granted.refresh_token) {
+			await redisManager.set(REFRESH_TOKEN_KEY, granted.refresh_token, {
+				EX: REFRESH_TOKEN_TTL_SECONDS,
+			});
+		}
 		return granted.id_token;
 	} catch (error: unknown) {
 		if (error instanceof AppError) {

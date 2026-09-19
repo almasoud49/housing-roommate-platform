@@ -39,7 +39,7 @@ export interface IBkashQueryPaymentPayload {
 export interface IBkashRefundPayload {
 	paymentId: string;
 	amount: number;
-	currency: string;
-	invoiceNumber: string;
+	trxID?: string;
+	sku?: string;
 	reason: string;
 }

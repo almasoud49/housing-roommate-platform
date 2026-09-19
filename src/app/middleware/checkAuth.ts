@@ -25,13 +25,22 @@ declare global {
 
 export const auth = (...requiredRoles: Role[]) => {
 	return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-		const token = req.cookies.accessToken
-			? req.cookies.accessToken
-			: req.headers.authorization?.startsWith("Bearer ")
-				? req.headers.authorization?.split(" ")[1]
-				: req.headers.authorization;
+		// Collect both candidates: Postman/browsers often send a stale
+		// `accessToken` cookie alongside a fresh `Authorization` header
+		// (old cookies outlive the 15m token). Try each, accept the
+		// first one that verifies instead of letting a dead cookie
+		// shadow a valid header.
+		const cookieToken: string | undefined =
+			req.cookies.accessToken || undefined;
+		const headerToken: string | undefined =
+			req.headers.authorization?.startsWith("Bearer ")
+				? req.headers.authorization.split(" ")[1] || undefined
+				: undefined;
+		const candidates = [cookieToken, headerToken].filter(
+			(t): t is string => !!t,
+		);
 
-		if (!token) {
+		if (candidates.length === 0) {
 			throw new AppError(
 				httpStatus.UNAUTHORIZED,
 				"You are not logged in. Please log in to access this resource.",
@@ -47,12 +56,24 @@ export const auth = (...requiredRoles: Role[]) => {
 			);
 		}
 
-		const verifiedToken = jwtUtils.verifyToken(token, accessSecret);
+		let verifiedToken: {
+			success: boolean;
+			data?: unknown;
+			error?: string;
+		} | null = null;
+		for (const candidate of candidates) {
+			const attempt = jwtUtils.verifyToken(candidate, accessSecret);
+			if (attempt.success) {
+				verifiedToken = attempt;
+				break;
+			}
+			verifiedToken = attempt;
+		}
 
-		if (!verifiedToken.success) {
+		if (!verifiedToken?.success) {
 			throw new AppError(
 				httpStatus.UNAUTHORIZED,
-				verifiedToken.error || "Token verification failed",
+				verifiedToken?.error || "Token verification failed",
 			);
 		}
 
@@ -68,9 +89,6 @@ export const auth = (...requiredRoles: Role[]) => {
 		const user = await prisma.user.findUnique({
 			where: {
 				id: userId,
-				email,
-				name,
-				role,
 			},
 		});
 
