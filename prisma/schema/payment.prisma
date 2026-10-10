@@ -7,9 +7,10 @@ model Payment {
   amount                  Float
   currency                String   @default("BDT")
   status                  PaymentStatus @default(PENDING)
-  bkashPaymentId          String?  @unique
-  bkashCreateResponse     Json?
-  bkashExecuteResponse    Json?
+  sslCommerzTranId        String?  @unique
+  sslCommerzValId         String?  @unique
+  sslCommerzCreateResponse Json?
+  sslCommerzValidateResponse Json?
   rents                   Rent[]
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
@@ -17,7 +18,8 @@ model Payment {
 
   @@index([tenantId])
   @@index([status])
-  @@index([bkashPaymentId])
+  @@index([sslCommerzTranId])
+  @@index([sslCommerzValId])
   @@index([createdAt])
   @@index([deletedAt])
 }

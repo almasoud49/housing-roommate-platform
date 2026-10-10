@@ -12,20 +12,19 @@ router.post(
 	validateRequest(PaymentValidation.initiatePaymentSchema),
 	PaymentController.initiatePayment,
 );
-router.post("/bkash/callback", PaymentController.bkashCallback);
-// bKash redirects to the callback URL via GET with ?paymentID=&status=&signature=
-router.get("/bkash/callback", PaymentController.bkashCallback);
+// SSLCommerz redirects to the callback URL via GET with ?tran_id=&status=&val_id=
+router.get("/sslcommerz/callback", PaymentController.sslcommerzCallback);
 router.get(
 	"/application/:applicationId",
 	auth("TENANT"),
 	PaymentController.getPaymentStatus,
 );
-router.get("/:id", auth(), PaymentController.getPaymentById);
 router.get(
-	"/bkash/status/:bkashPaymentId",
+	"/sslcommerz/status/:valId",
 	auth(),
-	PaymentController.queryPaymentStatus,
+	PaymentController.querySslcommerzStatus,
 );
+router.get("/:id", auth(), PaymentController.getPaymentById);
 router.post(
 	"/refund",
 	auth("LANDLORD", "ADMIN"),

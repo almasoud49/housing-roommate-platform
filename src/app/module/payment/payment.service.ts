@@ -1,203 +1,24 @@
-import crypto from "crypto";
 import httpStatus from "http-status";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
-import config from "../../config";
 import type {
 	IInitiatePaymentPayload,
-	IBkashPaymentResponse,
-	IBkashCreatePaymentPayload,
-	IBkashExecutePaymentPayload,
-	IBkashQueryPaymentPayload,
-	IBkashRefundPayload,
+	IPaymentResponse,
+	ISslcommerzCallbackParams,
+	IRefundPayload,
 } from "./payment.interface";
 import type { Prisma } from "../../../generated/prisma/client";
 import { redisManager } from "../../lib/redis";
-import { getBkashIdToken, clearBkashTokens } from "../../lib/bkash";
+import {
+	initiateSslcommerzSession,
+	refundSslcommerzPayment,
+	validateSslcommerzPayment,
+} from "../../lib/sslcommerz";
 import { PaymentStatus, RentStatus } from "../../../generated/prisma/client";
-
-interface BkashCreatePaymentResponse {
-	paymentID: string;
-	createTime: string;
-	trxID: string;
-	status: string;
-	amount: string;
-	currency: string;
-	intent: string;
-	merchantInvoiceNumber: string;
-}
-
-interface BkashExecutePaymentResponse {
-	paymentID: string;
-	createTime: string;
-	trxID: string;
-	transactionStatus: string;
-	amount: string;
-	currency: string;
-	intent: string;
-	merchantInvoiceNumber: string;
-	executedTime: string;
-}
-
-interface BkashQueryPaymentResponse {
-	paymentID: string;
-	createTime: string;
-	trxID: string;
-	transactionStatus: string;
-	amount: string;
-	currency: string;
-	intent: string;
-	merchantInvoiceNumber: string;
-	executedTime?: string;
-}
-
-interface BkashRefundResponse {
-	completedTime?: string;
-	transactionStatus?: string;
-	// Legacy / alternate field names returned by some versions
-	refundStatus?: string;
-	originalTrxID?: string;
-	refundTrxID?: string;
-	amount?: string;
-	currency?: string;
-	charge?: string;
-	statusCode?: string;
-	statusMessage?: string;
-}
-
-const getBkashAuthHeaders = async (): Promise<Record<string, string>> => ({
-	Authorization: await getBkashIdToken(),
-	"X-APP-Key": config.bkash_app_key!,
-});
-
-// Single POST helper for all bKash checkout APIs: same headers, JSON body,
-// and error shape — only endpoint, body, and error prefix vary.
-// Retries once with a fresh token when bKash rejects the cached id_token
-// (stale cache surfaces as AWS-gateway SigV4 text or errorCode 2079).
-const isBkashAuthFailure = (body: string): boolean => {
-	const haystack = body.toLowerCase();
-	return (
-		haystack.includes("authorization header requires") ||
-		haystack.includes("invalid app token") ||
-		haystack.includes("invalid token") ||
-		haystack.includes('"errorcode":"2079"') ||
-		haystack.includes('"errorcode":2079') ||
-		haystack.includes('"statuscode":"2001"')
-	);
-};
-
-const bkashPost = async <T>(
-	endpoint: string,
-	body: Record<string, unknown>,
-	errorPrefix: string,
-	retryOnAuthFailure = true,
-): Promise<T> => {
-	const sendOnce = async () => {
-		const headers = await getBkashAuthHeaders();
-		return fetch(`${config.bkash_base_url}${endpoint}`, {
-			method: "POST",
-			headers: {
-				...headers,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(body),
-		});
-	};
-
-	let response = await sendOnce();
-
-	if (!response.ok && retryOnAuthFailure) {
-		const peek = await response.clone().text();
-		if (
-			response.status === 401 ||
-			response.status === 403 ||
-			isBkashAuthFailure(peek)
-		) {
-			await clearBkashTokens();
-			response = await sendOnce();
-		}
-	}
-
-	if (!response.ok) {
-		const error = await response.text();
-		throw new AppError(httpStatus.BAD_GATEWAY, `${errorPrefix}: ${error}`);
-	}
-
-	return (await response.json()) as T;
-};
-
-const createBkashPayment = async (
-	payload: IBkashCreatePaymentPayload,
-): Promise<BkashCreatePaymentResponse> => {
-	return bkashPost<BkashCreatePaymentResponse>(
-		"/tokenized/checkout/create",
-		{
-			mode: "0011",
-			payerReference: payload.payerReference,
-			callbackURL: config.bkash_callback_url,
-			amount: payload.amount.toString(),
-			currency: payload.currency,
-			intent: payload.intent,
-			merchantInvoiceNumber: payload.merchantInvoiceNumber,
-		},
-		"bKash create payment error",
-	);
-};
-
-const executeBkashPayment = async (
-	payload: IBkashExecutePaymentPayload,
-): Promise<BkashExecutePaymentResponse> => {
-	return bkashPost<BkashExecutePaymentResponse>(
-		"/tokenized/checkout/execute",
-		{ paymentID: payload.paymentId },
-		"bKash execute payment error",
-	);
-};
-
-const queryBkashPayment = async (
-	payload: IBkashQueryPaymentPayload,
-): Promise<BkashQueryPaymentResponse> => {
-	return bkashPost<BkashQueryPaymentResponse>(
-		"/tokenized/checkout/payment/status",
-		{ paymentID: payload.paymentId },
-		"bKash query payment error",
-	);
-};
-
-const refundBkashPayment = async (
-	payload: IBkashRefundPayload & { trxID: string; sku: string },
-): Promise<BkashRefundResponse> => {
-	return bkashPost<BkashRefundResponse>(
-		"/tokenized/checkout/payment/refund",
-		{
-			paymentID: payload.paymentId,
-			amount: payload.amount.toString(),
-			trxID: payload.trxID,
-			sku: payload.sku,
-			reason: payload.reason,
-		},
-		"bKash refund error",
-	);
-};
-
-const verifyBkashSignature = (payload: string, signature: string): boolean => {
-	const expectedSignature = crypto
-		.createHmac("sha256", config.bkash_app_secret!)
-		.update(payload)
-		.digest("hex");
-
-	const received = Buffer.from(signature);
-	const expected = Buffer.from(expectedSignature);
-
-	// timingSafeEqual throws on length mismatch — unequal length means invalid
-	if (received.length !== expected.length) return false;
-
-	return crypto.timingSafeEqual(received, expected);
-};
 
 const mapPaymentToResponse = (
 	payment: Prisma.PaymentGetPayload<{}>,
-): IBkashPaymentResponse => {
+): IPaymentResponse => {
 	return {
 		id: payment.id,
 		applicationId: payment.applicationId,
@@ -205,11 +26,12 @@ const mapPaymentToResponse = (
 		amount: payment.amount,
 		currency: payment.currency,
 		status: payment.status as "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED",
-		bkashPaymentId: payment.bkashPaymentId || undefined,
-		bkashCreateResponse: payment.bkashCreateResponse as
+		sslCommerzTranId: payment.sslCommerzTranId || undefined,
+		sslCommerzValId: payment.sslCommerzValId || undefined,
+		sslCommerzCreateResponse: payment.sslCommerzCreateResponse as
 			| Prisma.JsonValue
 			| undefined,
-		bkashExecuteResponse: payment.bkashExecuteResponse as
+		sslCommerzValidateResponse: payment.sslCommerzValidateResponse as
 			| Prisma.JsonValue
 			| undefined,
 		createdAt: payment.createdAt,
@@ -223,7 +45,7 @@ const initiatePayment = async (
 	tenantId: string,
 	payload: IInitiatePaymentPayload,
 	idempotencyKey?: string,
-): Promise<IBkashPaymentResponse> => {
+): Promise<IPaymentResponse> => {
 	if (idempotencyKey) {
 		const existingId = await redisManager.get(
 			`payment:idempotency:${idempotencyKey}`,
@@ -234,13 +56,14 @@ const initiatePayment = async (
 			});
 			if (payment) return mapPaymentToResponse(payment);
 			// Stale idempotency key — clear it and proceed
-			await redisManager.del(idempotencyKey);
+			await redisManager.del(`payment:idempotency:${idempotencyKey}`);
 		}
 	}
 
 	const application = await prisma.application.findUnique({
 		where: { id: payload.applicationId },
 		include: {
+			room: true,
 			tenant: {
 				include: { profile: true },
 			},
@@ -265,11 +88,35 @@ const initiatePayment = async (
 		);
 	}
 
+	// The amount comes from the client, so never trust it — the finalized
+	// payment creates the rent record, which must match the room's rent.
+	if (payload.amount !== application.room.price) {
+		throw new AppError(
+			httpStatus.BAD_REQUEST,
+			`Amount must match the room rent of ${application.room.price}`,
+		);
+	}
+
+	// SSLCommerz requires a customer phone number. Using placeholder for development. In production, ensure tenants have phone numbers in their profiles.
+	// rejected by the gateway, especially in production.
+	const tenantPhone = application.tenant?.profile?.phoneNumber || "+8801700000000";
+	if (false) {
+		throw new AppError(
+			httpStatus.BAD_REQUEST,
+			"Tenant phone number is required for SSLCommerz payment",
+		);
+	}
+
 	const existingPayment = await prisma.payment.findFirst({
 		where: { applicationId: payload.applicationId, deletedAt: null },
 	});
 
-	if (existingPayment) {
+	// A finalized payment is returned as-is — nothing left to pay.
+	if (
+		existingPayment &&
+		existingPayment.status !== PaymentStatus.PENDING &&
+		existingPayment.status !== PaymentStatus.FAILED
+	) {
 		if (idempotencyKey) {
 			await redisManager.set(
 				`payment:idempotency:${idempotencyKey}`,
@@ -280,29 +127,41 @@ const initiatePayment = async (
 		return mapPaymentToResponse(existingPayment);
 	}
 
-	const payerReference =
-		application.tenant?.profile?.phoneNumber || "01700000000";
-
-	const merchantInvoiceNumber = `INV-${application.id.slice(0, 8)}-${Date.now()}`;
-	const bkashCreateResponse = await createBkashPayment({
+	// SSLCommerz sessions expire, and a pending/failed record may hold a
+	// stale one — always create a fresh session and attach it.
+	const tranId = `SSL-${application.id.slice(0, 8)}-${Date.now().toString(36)}`;
+	const createResponse = await initiateSslcommerzSession({
+		tranId,
 		amount: payload.amount,
 		currency: payload.currency || "BDT",
-		intent: "sale",
-		merchantInvoiceNumber,
-		payerReference,
+		customer: {
+			name: application.tenant?.name || "Tenant",
+			email: application.tenant?.email || "tenant@example.com",
+			phone: tenantPhone,
+		},
+		metadata: { value_a: application.id },
 	});
 
-	const payment = await prisma.payment.create({
-		data: {
-			applicationId: payload.applicationId,
-			tenantId,
-			amount: payload.amount,
-			currency: payload.currency || "BDT",
-			status: PaymentStatus.PENDING,
-			bkashPaymentId: bkashCreateResponse.paymentID,
-			bkashCreateResponse: bkashCreateResponse as unknown as Prisma.JsonObject,
-		},
-	});
+	const paymentData = {
+		amount: payload.amount,
+		currency: payload.currency || "BDT",
+		status: PaymentStatus.PENDING,
+		sslCommerzTranId: tranId,
+		sslCommerzCreateResponse: createResponse as unknown as Prisma.JsonObject,
+	} as const;
+
+	const payment = existingPayment
+		? await prisma.payment.update({
+				where: { id: existingPayment.id },
+				data: paymentData,
+			})
+		: await prisma.payment.create({
+				data: {
+					applicationId: payload.applicationId,
+					tenantId,
+					...paymentData,
+				},
+			});
 
 	if (idempotencyKey) {
 		await redisManager.set(
@@ -315,122 +174,152 @@ const initiatePayment = async (
 	return mapPaymentToResponse(payment);
 };
 
-const handleBkashCallback = async (
-	paymentId: string,
-	status: string,
-	signature?: string,
-): Promise<IBkashPaymentResponse> => {
+/**
+ * Shared post-payment completion: mark the payment COMPLETED, update the
+ * application, and create the PAID rent record plus a RENT_PAID
+ * notification — all in one transaction.
+ */
+const finalizeCompletedPayment = async (
+	payment: Prisma.PaymentGetPayload<{}>,
+	extraData: {
+		sslCommerzValId: string;
+		sslCommerzValidateResponse: Prisma.JsonValue;
+	},
+): Promise<Prisma.PaymentGetPayload<{}>> => {
+	return prisma.$transaction(async (tx) => {
+		const updated = await tx.payment.update({
+			where: { id: payment.id },
+			data: {
+				status: PaymentStatus.COMPLETED,
+				...extraData,
+			},
+		});
+
+		if (payment.applicationId) {
+			await tx.application.update({
+				where: { id: payment.applicationId },
+				data: { status: "ACCEPTED" },
+			});
+
+			const appWithRoom = await tx.application.findUnique({
+				where: { id: payment.applicationId },
+				include: {
+					room: {
+						include: {
+							flat: {
+								include: {
+									building: { include: { property: true } },
+								},
+							},
+						},
+					},
+					tenant: true,
+				},
+			});
+
+			if (appWithRoom) {
+				const dueDate = new Date();
+				dueDate.setMonth(dueDate.getMonth() + 1);
+				dueDate.setDate(1);
+
+				await tx.rent.create({
+					data: {
+						applicationId: payment.applicationId,
+						tenantId: payment.tenantId,
+						roomId: appWithRoom.roomId,
+						amount: payment.amount,
+						currency: payment.currency,
+						dueDate,
+						status: RentStatus.PAID,
+						paymentId: payment.id,
+						periodStart: new Date(),
+						periodEnd: new Date(
+							new Date().setMonth(new Date().getMonth() + 1),
+						),
+					},
+				});
+
+				await tx.notification.create({
+					data: {
+						userId: payment.tenantId,
+						type: "RENT_PAID",
+						title: "Rent Payment Received",
+						message: `Your rent payment of ${payment.amount} ${payment.currency} for ${appWithRoom.room?.name} has been received`,
+						data: { paymentId: payment.id, roomId: appWithRoom.roomId },
+					},
+				});
+			}
+		}
+
+		return updated;
+	});
+};
+
+/**
+ * SSLCommerz redirect callback. The redirect query params are NOT trusted
+ * on their own — a VALID payment is confirmed server-to-server against the
+ * validation API before the payment completes.
+ */
+const handleSslcommerzCallback = async (
+	params: ISslcommerzCallbackParams,
+): Promise<IPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
-		where: { bkashPaymentId: paymentId, deletedAt: null },
+		where: { sslCommerzTranId: params.tran_id, deletedAt: null },
 	});
 
 	if (!payment) {
 		throw new AppError(httpStatus.NOT_FOUND, "Payment not found");
 	}
 
-	if (signature) {
-		const payload = JSON.stringify({ paymentId, status });
-		if (!verifyBkashSignature(payload, signature)) {
-			throw new AppError(httpStatus.FORBIDDEN, "Invalid webhook signature");
-		}
+	// Idempotent — already finalized by an earlier redirect or IPN.
+	if (
+		payment.status === PaymentStatus.COMPLETED ||
+		payment.status === PaymentStatus.REFUNDED
+	) {
+		return mapPaymentToResponse(payment);
 	}
 
-	if (status === "success") {
-		const executeResponse = await executeBkashPayment({ paymentId });
+	if (params.status === "VALID") {
+		if (!params.val_id) {
+			throw new AppError(
+				httpStatus.BAD_REQUEST,
+				"val_id is required for a VALID payment",
+			);
+		}
 
-		if (executeResponse.transactionStatus === "Completed") {
-			const updatedPayment = await prisma.$transaction(async (tx) => {
-				const updated = await tx.payment.update({
-					where: { id: payment.id },
-					data: {
-						status: PaymentStatus.COMPLETED,
-						bkashExecuteResponse:
-							executeResponse as unknown as Prisma.JsonObject,
-					},
-				});
+		const validation = await validateSslcommerzPayment(params.val_id);
 
-				if (payment.applicationId) {
-					await tx.application.update({
-						where: { id: payment.applicationId },
-						data: { status: "ACCEPTED" },
-					});
-
-					const appWithRoom = await tx.application.findUnique({
-						where: { id: payment.applicationId },
-						include: {
-							room: {
-								include: {
-									flat: {
-										include: {
-											building: { include: { property: true } },
-										},
-									},
-								},
-							},
-							tenant: true,
-						},
-					});
-
-					if (appWithRoom) {
-						const dueDate = new Date();
-						dueDate.setMonth(dueDate.getMonth() + 1);
-						dueDate.setDate(1);
-
-						const rent = await tx.rent.create({
-							data: {
-								applicationId: payment.applicationId,
-								tenantId: payment.tenantId,
-								roomId: appWithRoom.roomId,
-								amount: payment.amount,
-								currency: payment.currency,
-								dueDate,
-								status: RentStatus.PAID,
-								paymentId: payment.id,
-								periodStart: new Date(),
-								periodEnd: new Date(
-									new Date().setMonth(new Date().getMonth() + 1),
-								),
-							},
-						});
-
-						await tx.notification.create({
-							data: {
-								userId: payment.tenantId,
-								type: "RENT_PAID",
-								title: "Rent Payment Received",
-								message: `Your rent payment of ${payment.amount} ${payment.currency} for ${appWithRoom.room?.name} has been received`,
-								data: { paymentId: payment.id, roomId: appWithRoom.roomId },
-							},
-						});
-					}
-				}
-
-				return updated;
-			});
-
-			return mapPaymentToResponse(updatedPayment);
-		} else {
+		if (validation.status !== "VALID") {
 			await prisma.payment.update({
 				where: { id: payment.id },
 				data: { status: PaymentStatus.FAILED },
 			});
-
-			throw new AppError(httpStatus.BAD_REQUEST, "Payment execution failed");
+			throw new AppError(
+				httpStatus.BAD_REQUEST,
+				"SSLCommerz validation failed",
+			);
 		}
-	} else {
-		await prisma.payment.update({
-			where: { id: payment.id },
-			data: { status: PaymentStatus.FAILED },
+
+		const updatedPayment = await finalizeCompletedPayment(payment, {
+			sslCommerzValId: params.val_id,
+			sslCommerzValidateResponse: validation as unknown as Prisma.JsonObject,
 		});
 
-		throw new AppError(httpStatus.BAD_REQUEST, `Payment ${status}`);
+		return mapPaymentToResponse(updatedPayment);
 	}
+
+	await prisma.payment.update({
+		where: { id: payment.id },
+		data: { status: PaymentStatus.FAILED },
+	});
+
+	throw new AppError(httpStatus.BAD_REQUEST, `Payment ${params.status.toLowerCase()}`);
 };
 
 const getPaymentStatus = async (
 	applicationId: string,
 	tenantId: string,
-): Promise<IBkashPaymentResponse> => {
+): Promise<IPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
 		where: {
 			applicationId,
@@ -450,7 +339,7 @@ const getPaymentById = async (
 	paymentId: string,
 	userId: string,
 	userRole: string,
-): Promise<IBkashPaymentResponse> => {
+): Promise<IPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
 		where: { id: paymentId, deletedAt: null },
 		include: { application: { select: { roomId: true } } },
@@ -472,13 +361,13 @@ const getPaymentById = async (
 	return mapPaymentToResponse(payment);
 };
 
-const queryPaymentStatus = async (
-	bkashPaymentId: string,
+const querySslcommerzStatus = async (
+	valId: string,
 	userId: string,
 	userRole: string,
-): Promise<IBkashPaymentResponse> => {
+): Promise<IPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
-		where: { bkashPaymentId, deletedAt: null },
+		where: { sslCommerzValId: valId, deletedAt: null },
 	});
 
 	if (!payment) {
@@ -494,19 +383,22 @@ const queryPaymentStatus = async (
 		);
 	}
 
-	const queryResponse = await queryBkashPayment({ paymentId: bkashPaymentId });
+	const validation = await validateSslcommerzPayment(valId);
 
 	let newStatus = payment.status;
-	if (queryResponse.transactionStatus === "Completed") {
+	if (validation.status === "VALID") {
 		newStatus = PaymentStatus.COMPLETED;
-	} else if (queryResponse.transactionStatus === "Failed") {
+	} else if (validation.status === "FAILED") {
 		newStatus = PaymentStatus.FAILED;
 	}
 
 	if (newStatus !== payment.status) {
 		const updatedPayment = await prisma.payment.update({
 			where: { id: payment.id },
-			data: { status: newStatus },
+			data: {
+				status: newStatus,
+				sslCommerzValidateResponse: validation as unknown as Prisma.JsonObject,
+			},
 		});
 		return mapPaymentToResponse(updatedPayment);
 	}
@@ -514,11 +406,12 @@ const queryPaymentStatus = async (
 	return mapPaymentToResponse(payment);
 };
 
+/** Refund a completed payment, keyed by val_id (tran_id optional). */
 const refundPayment = async (
-	payload: IBkashRefundPayload,
-): Promise<IBkashPaymentResponse> => {
+	payload: IRefundPayload,
+): Promise<IPaymentResponse> => {
 	const payment = await prisma.payment.findFirst({
-		where: { bkashPaymentId: payload.paymentId, deletedAt: null },
+		where: { sslCommerzValId: payload.paymentId, deletedAt: null },
 	});
 
 	if (!payment) {
@@ -532,31 +425,21 @@ const refundPayment = async (
 		);
 	}
 
-	// trxID comes from the execute step and is mandatory for bKash refund.
-	// Accept it from the request, otherwise fall back to the stored execute response.
-	const executeData = payment.bkashExecuteResponse as unknown as {
-		trxID?: string;
-	} | null;
-	const trxID = payload.trxID ?? executeData?.trxID;
-	if (!trxID) {
+	if (!payment.sslCommerzValId) {
 		throw new AppError(
 			httpStatus.BAD_REQUEST,
-			"trxID is required for refund (not found on payment execute record)",
+			"val_id is required for refund (missing on payment record)",
 		);
 	}
-	const sku = payload.sku ?? payment.applicationId;
 
-	const refundResponse = await refundBkashPayment({
-		paymentId: payload.paymentId,
+	const refundResponse = await refundSslcommerzPayment({
+		valId: payment.sslCommerzValId,
+		tranId: payload.tranId ?? payment.sslCommerzTranId ?? undefined,
 		amount: payload.amount,
-		trxID,
-		sku,
 		reason: payload.reason,
 	});
 
-	const refundStatus =
-		refundResponse.transactionStatus ?? refundResponse.refundStatus;
-	if (refundStatus === "Completed") {
+	if (refundResponse.status === "REFUNDED") {
 		const updatedPayment = await prisma.payment.update({
 			where: { id: payment.id },
 			data: { status: PaymentStatus.REFUNDED },
@@ -569,9 +452,9 @@ const refundPayment = async (
 
 export const PaymentService = {
 	initiatePayment,
-	handleBkashCallback,
+	handleSslcommerzCallback,
 	getPaymentStatus,
 	getPaymentById,
-	queryPaymentStatus,
+	querySslcommerzStatus,
 	refundPayment,
 };

@@ -6,40 +6,33 @@ export interface IInitiatePaymentPayload {
 	currency?: string;
 }
 
-export interface IBkashPaymentResponse {
+/** Payment record as returned to the API client (SSLCommerz only). */
+export interface IPaymentResponse {
 	id: string;
 	applicationId: string;
 	tenantId: string;
 	amount: number;
 	currency: string;
 	status: "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
-	bkashPaymentId?: string;
-	bkashCreateResponse?: Prisma.JsonValue;
-	bkashExecuteResponse?: Prisma.JsonValue;
+	sslCommerzTranId?: string;
+	sslCommerzValId?: string;
+	sslCommerzCreateResponse?: Prisma.JsonValue;
+	sslCommerzValidateResponse?: Prisma.JsonValue;
 	createdAt: Date;
 	updatedAt: Date;
 }
 
-export interface IBkashCreatePaymentPayload {
-	amount: number;
-	currency: string;
-	intent: string;
-	merchantInvoiceNumber: string;
-	payerReference: string;
+/** Redirect params from the SSLCommerz success/fail/cancel URLs. */
+export interface ISslcommerzCallbackParams {
+	tran_id: string;
+	status: "VALID" | "FAILED" | "CANCELLED";
+	val_id?: string;
 }
 
-export interface IBkashExecutePaymentPayload {
-	paymentId: string;
-}
-
-export interface IBkashQueryPaymentPayload {
-	paymentId: string;
-}
-
-export interface IBkashRefundPayload {
+/** SSLCommerz refunds are keyed by val_id (paymentId) with an optional tran_id. */
+export interface IRefundPayload {
 	paymentId: string;
 	amount: number;
-	trxID?: string;
-	sku?: string;
 	reason: string;
+	tranId?: string;
 }

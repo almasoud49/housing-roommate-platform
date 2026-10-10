@@ -6,21 +6,14 @@ const initiatePaymentSchema = z.object({
 	currency: z.string().length(3, "Currency must be 3 letters").default("BDT"),
 });
 
-const bkashCallbackSchema = z.object({
-	paymentId: z.string().min(1, "Payment ID is required"),
-	status: z.enum(["success", "failure", "cancel"]),
-});
-
 const refundPaymentSchema = z.object({
-	paymentId: z.string().min(1, "Payment ID is required"),
+	paymentId: z.string().min(1, "Payment ID (val_id) is required"),
 	amount: z.number().positive("Amount must be positive"),
-	trxID: z.string().min(1).optional(),
-	sku: z.string().min(1).max(255).optional(),
 	reason: z.string().min(1, "Reason is required").max(255),
+	tranId: z.string().min(1).optional(),
 });
 
 export const PaymentValidation = {
 	initiatePaymentSchema,
-	bkashCallbackSchema,
 	refundPaymentSchema,
 };

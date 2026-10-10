@@ -8,7 +8,7 @@ import config from "../../config";
 import { googleClient } from "../../lib/googleAuth";
 import { transporter } from "../../lib/nodemailer";
 import { prisma } from "../../lib/prisma";
-import { redisClient } from "../../lib/redis";
+import { connectRedis, redisClient } from "../../lib/redis";
 import { UserService } from "../user/user.service";
 import { AppError } from "../../utils/AppError";
 import { jwtUtils } from "../../utils/jwt";
@@ -150,6 +150,7 @@ const registerUser = async (
 	const expirationSeconds = 5 * 60;
 
 	const otpKey = `registration-otp:${email}`;
+	await connectRedis();
 	await redisClient.set(otpKey, otp, { EX: expirationSeconds });
 
 	const registrationDataKey = `registration-data:${email}`;
@@ -160,6 +161,7 @@ const registerUser = async (
 		role: payload.role || "TENANT",
 		profile: payload.profile,
 	};
+	await connectRedis();
 	await redisClient.set(registrationDataKey, JSON.stringify(registrationData), {
 		EX: expirationSeconds,
 	});
@@ -184,6 +186,7 @@ const verifyEmail = async (payload: IVerifyEmailPayload) => {
 	const otp = payload.otp;
 
 	const otpKey = `registration-otp:${email}`;
+	await connectRedis();
 	const redisOtp = await redisClient.get(otpKey);
 
 	if (!redisOtp) {
@@ -195,6 +198,7 @@ const verifyEmail = async (payload: IVerifyEmailPayload) => {
 	}
 
 	const registrationDataKey = `registration-data:${email}`;
+	await connectRedis();
 	const redisUserData = await redisClient.get(registrationDataKey);
 
 	if (!redisUserData) {
@@ -232,6 +236,7 @@ const verifyEmail = async (payload: IVerifyEmailPayload) => {
 		},
 	});
 
+	await connectRedis();
 	await redisClient.del([otpKey, registrationDataKey]);
 
 	await sendWelcomeEmail(createdUser.email, createdUser.name);
@@ -448,6 +453,7 @@ const forgotPassword = async (
 	const expirationSeconds = 5 * 60;
 
 	const otpKey = `forgot-password-otp:${email}`;
+	await connectRedis();
 	await redisClient.set(otpKey, otp, { EX: expirationSeconds });
 
 	await sendOTPEmail(
@@ -495,6 +501,7 @@ const resetPassword = async (
 	}
 
 	const otpKey = `forgot-password-otp:${email}`;
+	await connectRedis();
 	const redisOtp = await redisClient.get(otpKey);
 
 	if (!redisOtp) {
@@ -515,6 +522,7 @@ const resetPassword = async (
 		},
 	});
 
+	await connectRedis();
 	await redisClient.del(otpKey);
 
 	await sendPasswordResetSuccessEmail(user.email, user.name);
